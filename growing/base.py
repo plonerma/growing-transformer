@@ -104,7 +104,7 @@ class Linear(torch.nn.Linear):
             # copy novel neurons
             grown_weight.append(weight_dir[-num_novel:])
 
-        grown_weight = torch.concat(grown_weight)
+        grown_weight = torch.cat(grown_weight)
 
         if dim == 1:
             grown_weight = grown_weight.T
@@ -123,7 +123,7 @@ class Linear(torch.nn.Linear):
             if num_novel > 0:
                 grown_bias.append(bias_dir[-num_novel:])
 
-            self.grown_bias = torch.concat(grown_bias)
+            self.grown_bias = torch.cat(grown_bias)
 
         # adjust features
         self.out_features, self.in_features = self.grown_weight.size()
@@ -131,8 +131,6 @@ class Linear(torch.nn.Linear):
     def degrow(self,
                selected : torch.Tensor,  # indices of newly added neurons to keep
                dim :int = 0,  # dimension that was grown
-               split : bool = True,  # whether neuron splitting was applied
-               num_old : int = 0,  # number of old neurons
               ):
 
         with torch.no_grad():
@@ -145,7 +143,8 @@ class Linear(torch.nn.Linear):
 
             # calculate target size
             size = list(self.weight.size())
-            size[dim] = num_old + selected.size(0)
+            num_old = size[dim]
+            size[dim] += selected.size(0)
 
             weight = torch.empty(size)
             prev_weight = self.weight.data

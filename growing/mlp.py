@@ -15,8 +15,8 @@ class MLP(torch.nn.Module):
         self.reset_grow_state()
 
     def reset_grow_state(self):
-        self._new_neurons = None
-        self._was_split = None
+        self.linear_in.reset_grow_state()
+        self.linear_out.reset_grow_state()
 
     @property
     def in_features(self):
@@ -85,7 +85,7 @@ class MLP(torch.nn.Module):
             old_h = self.hidden_features - self.num_new_neurons
 
             if self._was_split:
-                x = x * torch.concat([
+                x = x * torch.cat([
                     self._new_neurons[:old_h],  # old neuons
                     self._new_neurons[:old_h],  # copy of old neurons
                 ] + (
@@ -122,7 +122,7 @@ class MLP(torch.nn.Module):
         assert self._new_neurons is not None
 
         # return indices of neurons with largest absolute gradient
-        return torch.topk(torch.abs(self._new_neurons.grad), k).indices
+        return torch.topk(-torch.abs(self._new_neurons.grad), k).indices
 
     def update_grown_weight(self):
         self.linear_in.update_grown_weight()
