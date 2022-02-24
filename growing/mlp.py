@@ -29,7 +29,7 @@ class MLP(torch.nn.Module):
     @property
     def hidden_features(self):
         return self.linear_in.out_features
-    
+
     @property
     def num_new_neurons(self):
         """Return total number of neurons that were added."""
@@ -37,61 +37,89 @@ class MLP(torch.nn.Module):
             return 0
         else:
             return self._new_neurons.size(0)
-    
+
     @contextmanager
-    def new_grad_only(self):
+    def some_grad_only(self, *some_parameters):
         assert self._new_neurons is not None
-        
+
         # temporarily save requires_grad for all parameters
         _requires_grad = [p.requires_grad for p in self.parameters()]
 
         # disable all grads
         for p in self.parameters():
             p.requires_grad = False
-            
-            
-        # enable grads for new neurons
-        self._new_neurons.requires_grad = True
-        
+
+        # enable grads some parameters
+        for p in some_parameters:
+            if p is not None:
+                p.requires_grad = True
+
         yield  # yield for forward pass
-        
-        # reset requires_grad of all parameters 
+
+        # reset requires_grad of all parameters
         for p, rg in zip(self.parameters(), _requires_grad):
             p.requires_grad = rg
 
+    @contextmanager
+    def new_grad_only(self):
+        with self.some_grad_only(self._new_neurons):
+            yield
+
+    @contextmanager
+    def direction_grad_only(self):
+        with self.some_grad_only(*self.direction_params()):
+            yield
+
+    def direction_params(self):
+        return [p for p in (
+            self.linear_in.bias_dir,
+            self.linear_in.weight_dir,
+            self.linear_out.bias_dir,
+            self.linear_out.weight_dir,
+        ) if p is not None]
+
     def forward(self, x):
         x = self.linear_in(x)
-        x = self.activation(x)
-        
+
         if self._new_neurons is not None:
             old_h = self.hidden_features - self.num_new_neurons
-            x = x * torch.concat([
-                self._new_neurons[:old_h],  # old neuons
-                self._new_neurons[:old_h],  # copy of old neurons
-                self._new_neurons[old_h:],  # novel neurons
-            ])
+
+            if self._was_split:
+                x = x * torch.concat([
+                    self._new_neurons[:old_h],  # old neuons
+                    self._new_neurons[:old_h],  # copy of old neurons
+                ] + (
+                    [self._new_neurons[old_h:]]  # novel neurons
+                    if self.num_new_neurons > old_h
+                    else []
+                ))
+            else:
+                if self.num_new_neurons > 0:
+                    x[..., -self.num_new_neurons:] = x[..., -self.num_new_neurons:]  * self._new_neurons
+
+        x = self.activation(x)
 
         x = self.linear_out(x)
         return x
 
     def grow(self, **kw):
         self._was_split = kw.get('split', True)
-        
+
         n = kw.get('num_novel', 0)
         if self._was_split:
             n += self.hidden_features
 
         # add parameter to measure influence/gradient of adding new neurons
         self._new_neurons = torch.nn.Parameter(torch.ones(n), requires_grad=False)
-        
+
         # grow both linear layers
-        self.linear_out.grow(dim=1, divide=True, **kw)
-        self.linear_in.grow(dim=0, divide=False, **{**kw, 'eps_novel': 1.0})
+        self.linear_out.grow(dim=1, **kw)
+        self.linear_in.grow(dim=0, **kw)
 
         return self.num_new_neurons
 
     def select(self, k):
-        assert self._new_neurons is not None        
+        assert self._new_neurons is not None
 
         # return indices of neurons with largest absolute gradient
         return torch.topk(torch.abs(self._new_neurons.grad), k).indices
