@@ -43,6 +43,10 @@ class SimpleModel(torch.nn.Module):
     def direction_params(self):
         return self.a.direction_params() + self.b.direction_params()
 
+    def update_grown_weight(self):
+        self.a.update_grown_weight()
+        self.b.update_grown_weight()
+
 def toy_data(n=16):
     # toy training data
     train_x = torch.Tensor(n, 1)
@@ -144,7 +148,7 @@ def eval_series(results):
 
         y = model(x).detach().numpy()
         plt.plot(x.detach().numpy(), y)
-        
+
         r['final_loss'] = eval_model(model)
 
     plt.scatter(train_x.detach(), train_y.detach(), marker='+', c='k')
