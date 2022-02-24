@@ -29,11 +29,19 @@ class SimpleModel(torch.nn.Module):
 
     def degrow(self, sa, sb):
         return self.a.degrow(sa), self.b.degrow(sb)
-    
+
     @contextmanager
     def new_grad_only(self):
         with self.a.new_grad_only(), self.b.new_grad_only():
             yield
+
+    @contextmanager
+    def direction_grad_only(self):
+        with self.a.direction_grad_only(), self.b.direction_grad_only():
+            yield
+
+    def direction_params(self):
+        return self.a.direction_params() + self.b.direction_params()
 
 def toy_data(n=16):
     # toy training data
@@ -41,7 +49,7 @@ def toy_data(n=16):
     torch.nn.init.uniform_(train_x, -5, 5)
     train_y = torch.Tensor(n, 1)
     torch.nn.init.normal_(train_y, 0, .1)
-    train_y += torch.sin(train_x)
+    train_y += torch.sin(train_x)*0.8
     return train_x, train_y
 
 def growing_train(model, *, grow=None, lr=0.01, use_onecycle=False, num_batches=200, num_epochs=10):
@@ -50,18 +58,18 @@ def growing_train(model, *, grow=None, lr=0.01, use_onecycle=False, num_batches=
     criterion = torch.nn.MSELoss()
 
     optim = torch.optim.Adam(model.parameters(), lr=lr)
-    
-    for growth_phase in range(5):  
+
+    for growth_phase in range(5):
         if growth_phase > 0:
             if grow is not None:
                 grow(model)
-                optim = torch.optim.Adam(model.parameters(), lr=lr)        
+                optim = torch.optim.Adam(model.parameters(), lr=lr)
 
         scheduler = None
-                    
+
         if use_onecycle:
             scheduler = torch.optim.lr_scheduler.OneCycleLR(optimizer, total_steps=200, max_lr=lr)
-        
+
         for epoch in range(num_epochs):
             loss_sum = 0
             for batch in range(num_batches):
@@ -77,7 +85,7 @@ def growing_train(model, *, grow=None, lr=0.01, use_onecycle=False, num_batches=
 
                 if scheduler:
                     scheduler.step()
-                
+
                 loss_sum += loss.data
 
             losses.append(loss_sum / num_batches)
@@ -90,7 +98,7 @@ def growing_train(model, *, grow=None, lr=0.01, use_onecycle=False, num_batches=
 def experiment_series(model_args, runs=5, **kw):
     results = list()
     plt.subplots(figsize=(20, 8))
-    
+
     for i in range(runs):
         torch.manual_seed(i)
         model = SimpleModel(*model_args)
@@ -100,48 +108,45 @@ def experiment_series(model_args, runs=5, **kw):
 
         result['i'] = i
         results.append(result)
-        
-        
+
+
         plt.plot(result['loss_series'])
         plt.gca().xaxis.grid(True)
     plt.show()
     return results
-        
-    
-def eval_model(model):
-    train_x, train_y = toy_data()
-    
-    plt.subplots(figsize=(12, 8))
 
-    x = torch.linspace(-5, 5, 100)[:, None]
 
+def eval_model(model, num_batches=20):
     model.eval()
+    loss_sum = 0
+    criterion = torch.nn.MSELoss()
+    for batch in range(num_batches):
+        train_x, train_y = toy_data()
 
-    y = model(x).detach().numpy()
-    x = x.detach().numpy()
-    plt.plot(x, y, c='tab:orange')
+        y = model(train_x)
+        loss = criterion(y, train_y)
 
-    plt.scatter(train_x.detach(), train_y.detach(), marker='+')
-    #plt.legend()
-    plt.show()
-    
+        loss_sum += loss.data
+
+    return loss_sum / num_batches
+
 def eval_series(results):
     train_x, train_y = toy_data()
-    
+
     plt.subplots(figsize=(12, 8))
 
     x = torch.linspace(-5, 5, 100)[:, None]
 
     for r in results:
         model = r['model']
-    
+
         model.eval()
 
         y = model(x).detach().numpy()
         plt.plot(x.detach().numpy(), y)
+        
+        r['final_loss'] = eval_model(model)
 
     plt.scatter(train_x.detach(), train_y.detach(), marker='+', c='k')
     #plt.legend()
     plt.show()
-    
-    
