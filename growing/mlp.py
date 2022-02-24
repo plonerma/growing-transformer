@@ -124,6 +124,10 @@ class MLP(torch.nn.Module):
         # return indices of neurons with largest absolute gradient
         return torch.topk(torch.abs(self._new_neurons.grad), k).indices
 
+    def update_grown_weight(self):
+        self.linear_in.update_grown_weight()
+        self.linear_out.update_grown_weight()
+
     def degrow(self, selected):
         kw = dict(
             selected=selected,

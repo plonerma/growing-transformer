@@ -11,12 +11,15 @@ class Linear(torch.nn.Linear):
         self.reset_grow_state()
 
     def reset_grow_state(self):
-        self.grown_weight = None
-        self.grown_bias = None
-
         # update directions (to be trained)
         self.weight_dir = None
         self.bias_dir = None
+
+        # grown weights (resulting from update directions)
+        self.grown_weight = None
+        self.grown_bias = None
+
+        self.was_split = False
 
     def forward(self, input: Tensor) -> Tensor:
         if self.grown_weight is not None:
@@ -33,20 +36,19 @@ class Linear(torch.nn.Linear):
              ):
         prev_h = self.weight.size(dim)
 
+        self.was_split = split
+
         # size of update direction tensor
         size = list(self.weight.size())
         size[dim] = num_novel + split * prev_h
 
         # create update direction for weight
-        self.weight_dir = torch.nn.Parameter(torch.empty(*size))
+        self.weight_dir = torch.nn.Parameter(torch.empty(size), requires_grad=True)
 
         weight_dir = self.weight_dir
-        prev_weight = self.weight.detach()
 
-        # from here one we can work with weight_dir as if dim ==0
         if dim == 1:
             weight_dir = weight_dir.T
-            prev_weight = prev_weight.T
 
         # initialize split portion
         if split:
@@ -57,57 +59,71 @@ class Linear(torch.nn.Linear):
             torch.nn.init.normal_(weight_dir[-num_novel:], 0, eps_novel)
 
 
-        if split:
-            if dim == 1:
-                prev_weight = prev_weight * 0.5
-
-            grown_weight = torch.concat([
-                prev_weight + weight_dir[:prev_h],
-                prev_weight - weight_dir[:prev_h],
-            ] + (
-                [weight_dir[-num_novel:]]
-                if num_novel > 0
-                else []
-            ))
-        else:
-            grown_weight = torch.concat([
-                prev_weight,
-                weight_dir
-            ])
-
-        if dim == 1:
-            # switch back the dimensions
-            grown_weight = grown_weight.T
-
-        # store grown weight for forward pass
-        self.grown_weight = grown_weight
-
         if dim == 0:
-            self.bias_dir = torch.nn.Parameter(torch.empty(size[0]))
-            bias_dir = self.bias_dir
+            self.bias_dir = torch.nn.Parameter(torch.empty(num_novel + split * prev_h), requires_grad=True)
 
             # initialize split portion
             if split:
-                torch.nn.init.normal_(bias_dir[:prev_h], 0, eps_split)
+                torch.nn.init.normal_(self.bias_dir[:prev_h], 0, eps_split)
 
             # initialize novel portion
             if num_novel > 0:
-                torch.nn.init.normal_(bias_dir[-num_novel:], 0, eps_novel)
+                torch.nn.init.normal_(self.bias_dir[-num_novel:], 0, eps_novel)
 
-            if split:
-                grown_bias = torch.concat([
-                    self.bias + bias_dir[:prev_h],
-                    self.bias - bias_dir[:prev_h],
-                ] + ([bias_dir[-num_novel:]] if num_novel > 0 else []))
-            else:
-                grown_bias = torch.concat([
-                    self.bias,
-                    bias_dir
-                ])
+    def update_grown_weight(self):
+        weight_dir = self.weight_dir
+        bias_dir = self.bias_dir
 
-            self.grown_bias = grown_bias
-        else:
-            self.grown_bias = self.bias
+        prev_weight = self.weight.detach()
+        prev_bias = self.bias.detach()
+
+
+        dim = (bias_dir is None) * 1
+        prev_h = self.weight.size(dim)
+
+        num_novel = weight_dir.size(dim) - prev_h * self.was_split
+
+        # from here one we can work with weight_dir as if dim ==0
+        if dim == 1:
+            weight_dir = weight_dir.T
+            prev_weight = prev_weight.T
+
+        grown_weight = list()
+
+        if self.was_split:
+            if dim == 1:
+                prev_weight = prev_weight * 0.5
+
+            # copy split weight
+            grown_weight = [
+                prev_weight + weight_dir[:prev_h],
+                prev_weight - weight_dir[:prev_h],
+            ]
+
+        if num_novel > 0:
+            # copy novel neurons
+            grown_weight.append(weight_dir[-num_novel:])
+
+        grown_weight = torch.concat(grown_weight)
+
+        if dim == 1:
+            grown_weight = grown_weight.T
+
+        self.grown_weight = grown_weight
+
+        if bias_dir is not None:
+            grown_bias = []
+
+            if self.was_split:
+                grown_bias = [
+                    prev_bias + bias_dir[:prev_h],
+                    prev_bias - bias_dir[:prev_h]
+                ]
+
+            if num_novel > 0:
+                grown_bias.append(bias_dir[-num_novel:])
+
+            self.grown_bias = torch.concat(grown_bias)
 
         # adjust features
         self.out_features, self.in_features = self.grown_weight.size()
