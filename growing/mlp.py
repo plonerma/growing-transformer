@@ -1,22 +1,29 @@
 import torch
-
+from torch.nn import functional as F
 from contextlib import contextmanager
+from typing import Optional
 
-from .base import Linear
 
 class MLP(torch.nn.Module):
-    def __init__(self, in_features, out_features, hidden_features, activation=torch.nn.Sigmoid()):
+    def __init__(self, in_features, out_features, hidden_features, activation=torch.nn.Tanh()):
         super().__init__()
 
-        self.linear_in = Linear(in_features, hidden_features)
+        self.linear_in = torch.nn.Linear(in_features, hidden_features)
         self.activation = activation
-        self.linear_out = Linear(hidden_features, out_features)
+        self.linear_out = torch.nn.Linear(hidden_features, out_features)
+        self.hidden_features = hidden_features
 
         self.reset_grow_state()
 
     def reset_grow_state(self):
-        self.linear_in.reset_grow_state()
-        self.linear_out.reset_grow_state()
+        # update directions (to be trained)
+        self.weight_dir = None
+        self.bias_dir = None
+
+        # step size (used to calculate gradients for selecting kept neurons)
+        self.new_neurons = None
+
+        self.was_split = False
 
     @property
     def in_features(self):
@@ -27,21 +34,15 @@ class MLP(torch.nn.Module):
         return self.linear_out.out_features
 
     @property
-    def hidden_features(self):
-        return self.linear_in.out_features
-
-    @property
     def num_new_neurons(self):
         """Return total number of neurons that were added."""
-        if self._new_neurons is None:
+        if self.new_neurons is None:
             return 0
         else:
-            return self._new_neurons.size(0)
+            return self.new_neurons.size(0)
 
     @contextmanager
     def some_grad_only(self, *some_parameters):
-        assert self._new_neurons is not None
-
         # temporarily save requires_grad for all parameters
         _requires_grad = [p.requires_grad for p in self.parameters()]
 
@@ -62,7 +63,7 @@ class MLP(torch.nn.Module):
 
     @contextmanager
     def new_grad_only(self):
-        with self.some_grad_only(self._new_neurons):
+        with self.some_grad_only(self.new_neurons):
             yield
 
     @contextmanager
@@ -71,70 +72,168 @@ class MLP(torch.nn.Module):
             yield
 
     def direction_params(self):
-        return [p for p in (
-            self.linear_in.bias_dir,
-            self.linear_in.weight_dir,
-            self.linear_out.bias_dir,
-            self.linear_out.weight_dir,
-        ) if p is not None]
+        return [
+            self.weight_dir,
+            self.bias_dir
+        ]
 
     def forward(self, x):
-        x = self.linear_in(x)
+        h = self.linear_in(x)
 
-        if self._new_neurons is not None:
-            old_h = self.hidden_features - self.num_new_neurons
+        if self.new_neurons is not None and self.was_split:
+            w_noise = F.linear(x,
+                self.weight_dir[:self.hidden_features],
+                self.bias_dir[:self.hidden_features]
+            ) * self.new_neurons[:self.hidden_features]
 
-            if self._was_split:
-                x = x * torch.cat([
-                    self._new_neurons[:old_h],  # old neuons
-                    self._new_neurons[:old_h],  # copy of old neurons
-                ] + (
-                    [self._new_neurons[old_h:]]  # novel neurons
-                    if self.num_new_neurons > old_h
-                    else []
-                ))
-            else:
-                if self.num_new_neurons > 0:
-                    x[..., -self.num_new_neurons:] = x[..., -self.num_new_neurons:]  * self._new_neurons
+            h_plus = self.activation(h + w_noise)
+            h_minus = self.activation(h - w_noise)
 
-        x = self.activation(x)
+            h = 0.5 * (h_plus + h_minus)
+        else:
+            h = self.activation(h)
 
-        x = self.linear_out(x)
-        return x
+        y = self.linear_out(h)
 
-    def grow(self, **kw):
-        self._was_split = kw.get('split', True)
+        if self.new_neurons is not None:
+            num_novel = self.num_new_neurons - self.was_split * self.hidden_features
 
-        n = kw.get('num_novel', 0)
-        if self._was_split:
-            n += self.hidden_features
+            if num_novel > 0:
+                h_new = F.linear(x,
+                    self.weight_dir[-num_novel:],
+                    self.bias_dir[-num_novel:]
+                ) * self.new_neurons[-num_novel:]
+
+                y_add = self.activation(h_new)
+
+                # equivalent to using a weight of one for each output neuron
+                y_add = y_add.sum(-1, keepdim=True)
+
+                y = y + y_add
+
+        return y
+
+    def grow(self,
+              split : bool = True,
+              num_novel : int = 0,
+              step_size = 1e-2,
+              eps : float = 1e-1,
+              eps_split : Optional[float] = None,
+              eps_novel : Optional[float] = None,
+              eps_split_weight : Optional[float] = None,
+              eps_split_bias : Optional[float] = None,
+              eps_novel_weight : Optional[float] = None,
+              eps_novel_bias : Optional[float] = None):
+
+        self.was_split = split
+
+        num_new = self.hidden_features * split + num_novel
 
         # add parameter to measure influence/gradient of adding new neurons
-        self._new_neurons = torch.nn.Parameter(torch.ones(n), requires_grad=False)
-
-        # grow both linear layers
-        self.linear_out.grow(dim=1, **kw)
-        self.linear_in.grow(dim=0, **kw)
-
-        return self.num_new_neurons
-
-    def select(self, k):
-        assert self._new_neurons is not None
-
-        # return indices of neurons with largest absolute gradient
-        return torch.topk(-torch.abs(self._new_neurons.grad), k).indices
-
-    def update_grown_weight(self):
-        self.linear_in.update_grown_weight()
-        self.linear_out.update_grown_weight()
-
-    def degrow(self, selected):
-        kw = dict(
-            selected=selected,
-            split=self._was_split,
-            num_old=self.hidden_features - self.num_new_neurons
+        self.new_neurons = torch.nn.Parameter(
+            torch.ones(num_new) * step_size,
+            requires_grad=False
         )
 
-        self.linear_out.degrow(dim=1, **kw)
-        self.linear_in.degrow(dim=0, **kw)
+        # create update direction for weight and bias
+        self.weight_dir = torch.nn.Parameter(torch.empty(
+            num_new, self.in_features
+        ), requires_grad=False)
+
+        self.bias_dir = torch.nn.Parameter(torch.empty(num_new), requires_grad=False)
+
+        # initialize directions
+        if split:
+            e = eps_split_weight or eps_split or eps
+            torch.nn.init.uniform_(
+                self.weight_dir[:self.hidden_features],
+                -e, e)
+
+            e = eps_split_bias or eps_split or eps
+            torch.nn.init.uniform_(
+                self.bias_dir[:self.hidden_features],
+                -e, e)
+
+        if num_novel > 0:
+            e = eps_novel_weight or eps_novel or eps
+            torch.nn.init.uniform_(
+                self.weight_dir[-num_novel:],
+                -e, e)
+
+            e = eps_novel_bias or eps_novel or eps
+            torch.nn.init.uniform_(
+                self.bias_dir[-num_novel],
+                -e, e)
+
+        return num_new
+
+    def select(self, k):
+        assert self.new_neurons is not None
+
+        # return indices of neurons with largest absolute gradient
+        return torch.topk(torch.abs(self.new_neurons.grad), k).indices
+
+    def degrow(self, selected : torch.Tensor):
+        with torch.no_grad():
+            num_old = self.hidden_features
+
+            # split neurons to keep
+            split = selected[selected < num_old * self.was_split]
+            num_split = split.size(0)
+            # novel neurons to add
+            novel = selected[selected >= num_old * self.was_split]
+
+            weight_in = torch.empty(
+                num_old + selected.size(0),
+                self.in_features
+            )
+
+            weight_out = torch.empty(
+                self.out_features,
+                num_old + selected.size(0),
+            )
+
+            bias_in = torch.empty(num_old + selected.size(0))
+
+            # copy old neurons (split neurons will be overwritten)
+            weight_in[:num_old] = self.linear_in.weight
+            bias_in[:num_old] = self.linear_in.bias
+            weight_out[:, :num_old] = self.linear_out.weight
+
+            # copy split neurons (with update direction)
+
+            if split.size(0) > 0:
+                weight_noise =  self.weight_dir[split] * self.new_neurons[split, None]
+
+                weight_in[split] = self.linear_in.weight[split] + weight_noise
+                weight_in[num_old:num_old + num_split] = self.linear_in.weight[split] - weight_noise
+
+                bias_noise =  self.bias_dir[split] * self.new_neurons[split]
+
+                bias_in[split] = self.linear_in.bias[split] + bias_noise
+                bias_in[num_old:num_old + num_split] = self.linear_in.bias[split] - bias_noise
+
+                # for output layer, copy half the weights
+                weight_out[:, split] = self.linear_out.weight[:, split] * 0.5
+                weight_out[:, num_old:num_old + num_split] = self.linear_out.weight[:, split] * 0.5
+
+            if novel.size(0) > 0:
+                if not self.was_split:
+                    novel -= num_old
+
+                # copy new neurons
+                weight_in[num_old + num_split:] = self.weight_dir[novel] * self.new_neurons[novel, None]
+                bias_in[num_old + num_split:] = self.bias_dir[novel] * self.new_neurons[novel]
+
+                # for output layer initialize 1
+                weight_out[num_old + num_split:] = 1.0
+
+
+            self.linear_in.weight = torch.nn.Parameter(weight_in)
+            self.linear_in.bias = torch.nn.Parameter(bias_in)
+            self.linear_out.weight = torch.nn.Parameter(weight_out)
+
+        # adjust features
+        self.hidden_features = self.linear_in.weight.size(0)
+
         self.reset_grow_state()

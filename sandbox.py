@@ -43,9 +43,46 @@ class SimpleModel(torch.nn.Module):
     def direction_params(self):
         return self.a.direction_params() + self.b.direction_params()
 
-    def update_grown_weight(self):
-        self.a.update_grown_weight()
-        self.b.update_grown_weight()
+    def new_neurons(self):
+        return [self.a.new_neurons, self.b.new_neurons]
+    
+    def tune_direction(self):
+        criterion = torch.nn.MSELoss()
+        with self.direction_grad_only():
+            optimizer = torch.optim.RMSprop(self.direction_params(), lr=1e-3, momentum=0.1, alpha=0.9)
+
+            for _ in range(5): # batches
+                optimizer.zero_grad()
+                train_x, train_y = toy_data()
+                y = self(train_x)
+                loss = criterion(y, train_y)
+
+                penalty = 0
+                for p in self.direction_params():
+                    penalty += (p ** 2).sum()
+
+                loss.backward()
+                penalty.backward()
+                optimizer.step()
+    
+    def tune_new_neurons(self):
+        criterion = torch.nn.MSELoss()
+        with self.new_grad_only():
+            optimizer = torch.optim.RMSprop(self.new_neurons(), lr=1e-3, momentum=0.1, alpha=0.9)
+
+            for _ in range(5): # batches
+                optimizer.zero_grad()
+                train_x, train_y = toy_data()
+                y = self(train_x)
+                loss = criterion(y, train_y)
+
+                penalty = 0
+                for p in self.new_neurons():
+                    penalty += (p ** 2).sum()
+
+                loss.backward()
+                penalty.backward()
+                optimizer.step()
 
 def toy_data(n=16):
     # toy training data
@@ -60,6 +97,7 @@ def growing_train(model, *, grow=None, lr=0.01, use_onecycle=False, num_batches=
 
     losses = list()
     criterion = torch.nn.MSELoss()
+    sizes = list()
 
     optim = torch.optim.Adam(model.parameters(), lr=lr)
 
@@ -93,10 +131,12 @@ def growing_train(model, *, grow=None, lr=0.01, use_onecycle=False, num_batches=
                 loss_sum += loss.data
 
             losses.append(loss_sum / num_batches)
+            sizes.append(sum(p.numel() for p in model.parameters()))
     return dict(
         model=model,
         loss_series=np.array(losses),
         size=sum(p.numel() for p in model.parameters()),
+        size_series=sizes,
     )
 
 def experiment_series(model_args, runs=5, **kw):
@@ -116,6 +156,7 @@ def experiment_series(model_args, runs=5, **kw):
 
         plt.plot(result['loss_series'])
         plt.gca().xaxis.grid(True)
+        plt.ylim(0, 1)
     plt.show()
     return results
 
@@ -152,5 +193,5 @@ def eval_series(results):
         r['final_loss'] = eval_model(model)
 
     plt.scatter(train_x.detach(), train_y.detach(), marker='+', c='k')
-    #plt.legend()
+    plt.ylim(-1, 1)
     plt.show()
