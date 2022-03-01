@@ -3,6 +3,10 @@ from contextlib import contextmanager
 from abc import abstractmethod
 
 class GrowingModule(torch.nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.reset_grow_state()
+
     @contextmanager
     def some_grad_only(self, *some_parameters):
         # temporarily save requires_grad for all parameters
@@ -26,6 +30,17 @@ class GrowingModule(torch.nn.Module):
     def reset_grow_state(self):
         # step size (used to calculate gradients for selecting kept neurons)
         self.new_neurons = None
+        self.was_split = False
+
+        # update directions (to be trained)
+        self._weight_dir = None
+        self._bias_dir = None
+
+    def direction_params(self):
+        return [
+            self._weight_dir,
+            self._bias_dir
+        ]
 
     @property
     def num_new_neurons(self):
@@ -44,10 +59,6 @@ class GrowingModule(torch.nn.Module):
     def direction_grad_only(self):
         with self.some_grad_only(*self.direction_params()):
             yield
-
-    @abstractmethod
-    def direction_params(self):
-        pass
 
     @abstractmethod
     def degrow(self, selected : torch.Tensor):

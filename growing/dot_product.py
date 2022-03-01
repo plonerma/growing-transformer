@@ -6,7 +6,7 @@ from contextlib import contextmanager
 from typing import Optional
 
 
-class Attention(GrowingModule):
+class DotProduct(GrowingModule):
     def __init__(self, d_model, heads, d_head):
         super().__init__()
 
@@ -16,19 +16,6 @@ class Attention(GrowingModule):
         self.heads = heads
 
         self.d_head = d_head
-
-    def reset_grow_state(self):
-        super().reset_grow_state()
-
-        # update directions (to be trained)
-        self._weight_dir = None
-        self._bias_dir = None
-
-    def direction_params(self):
-        return [
-            self._weight_dir,
-            self._bias_dir
-        ]
 
     @property
     def in_features(self):
@@ -53,12 +40,7 @@ class Attention(GrowingModule):
 
             product = product + torch.einsum('bqhi,bkhi->bqhk', q_novel, k_novel)
 
-        return torch.softmax(
-            product  / torch.sqrt(torch.tensor(self.d_head)),
-
-             # The attention scores (given a batch, head, & query) should sum up to 1
-            axis=-1
-        )
+        return product  / torch.sqrt(torch.tensor(self.d_head))
 
     def grow(self,
              num_novel : int = 0,
@@ -94,62 +76,44 @@ class Attention(GrowingModule):
     def degrow(self, selected : torch.Tensor):
         with torch.no_grad():
 
-            num_old = self.in_features
-
+            d_new = selected.size(0) / self.heads
 
             q_weight = torch.empty(
-                num_old + selected.size(0),
-                self.in_features
+                self.heads, self.d_head + d_new, self.in_features
             )
 
             k_weight = torch.empty(
-                num_old + selected.size(0),
-                self.in_features,
+                self.heads, self.d_head + d_new, self.in_features
             )
 
-            q_bias = torch.empty(
-                num_old + selected.size(0),
-            )
+            q_bias = torch.empty(self.heads, self.d_head + d_new)
 
-            k_bias = torch.empty(
-                num_old + selected.size(0),
-            )
-
-            num_new = selected.size(0) / self.heads
-            new_d_head = self.d_head + num_new
-            scale = torch.sqrt(torch.tensor(new_d_head / self.d_head))
+            k_bias = torch.empty(self.heads, self.d_head + d_new)
 
             # copy old neurons
-            # space out entries
 
-            head_offsets = torch.arange(self.heads) * (self.d_head + num_new)
-            old_indices = (
-                head_offsets.repeat_interleave(d_head)
-                # per head: enumerate old neurons
-                + torch.arange(self.d_head).repeat(self.heads)
-            )
-
-            q_weight[old_indices] = self.q_linear.weight * scale
-            k_weight[old_indices] = self.k_linear.weight * scale
-            q_bias[old_indices] = self.q_linear.bias * scale
-            k_bias[old_indices] = self.k_linear.bias * scale
-
-            new_indices = (
-                # offset per head
-                head_offsets.repeat_interleave(num_new)
-                + torch.arange(num_new).repeat(self.heads) + self.d_head
-            )
+            q_weight[:, :self.d_head] = self.q_linear.weight
+            k_weight[:, :self.d_head] = self.k_linear.weight
+            q_bias[:, :self.d_head] = self.q_linear.bias
+            k_bias[:, :self.d_head] = self.k_linear.bias
 
             # copy new neurons
-            q_weight[new_indices] = self._weight_dir[0][selected] * sef.new_neurons[selected]
-            k_weight[new_indices] = self._weight_dir[1][selected]
-            q_bias[new_indices] = self._weight_bias[0][selected] * sef.new_neurons[selected]
-            k_bias[new_indices] = self._weight_bisa[1][selected]
+            q_weight[:, self.d_head:] = self._weight_dir[0][selected] * sef.new_neurons[selected]
+            k_weight[:, self.d_head:] = self._weight_dir[1][selected]
+            q_bias[:, self.d_head:] = self._weight_bias[0][selected] * sef.new_neurons[selected]
+            k_bias[:, self.d_head:] = self._weight_bisa[1][selected]
 
-            self.q_linear.weight = torch.nn.Parameter(q_weight)
-            self.k_linear.weight = torch.nn.Parameter(k_weight)
-            self.q_linear.bias = torch.nn.Parameter(q_bias)
-            self.k_linear.bias = torch.nn.Parameter(k_bias)
+            scale = torch.sqrt(torch.tensor(new_d_head / self.d_head))
+
+            q_weight /= scale
+            k_weight /= scale
+            q_bias /= scale
+            k_bias /= scale
+
+            self.q_linear.weight = torch.nn.Parameter(q_weight.reshape(self.heads, self.d_head, -1))
+            self.k_linear.weight = torch.nn.Parameter(k_weight.reshape(self.heads, self.d_head, -1))
+            self.q_linear.bias = torch.nn.Parameter(q_bias.reshape(self.heads, self.d_head, -1))
+            self.k_linear.bias = torch.nn.Parameter(k_bias.reshape(self.heads, self.d_head, -1))
 
 
         self.reset_grow_state()

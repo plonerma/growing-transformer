@@ -1,10 +1,9 @@
 import torch
-from torch.nn import functional as F
-
-from .base import GrowingModule
 
 from contextlib import contextmanager
 from typing import Optional
+
+from .base import GrowingModule
 
 
 class MLP(GrowingModule):
@@ -16,36 +15,30 @@ class MLP(GrowingModule):
         self.linear_out = torch.nn.Linear(hidden_features, out_features)
         self.hidden_features = hidden_features
 
-        self.reset_grow_state()
-
     def reset_grow_state(self):
         super().reset_grow_state()
 
-        # update directions (to be trained)
-        self._weight_dir = None
-        self._bias_dir = None
-
-        self.was_split = False
+        # adjust features
+        self.linear_in.out_features, self.linear_in.in_features = self.linear_in.weight.size()
+        self.linear_out.out_features, self.linear_out.in_features = self.linear_out.weight.size()
 
     @property
     def in_features(self):
         return self.linear_in.in_features
 
     @property
+    def hidden_features(self):
+        return self.linear_in.out_features
+
+    @property
     def out_features(self):
         return self.linear_out.out_features
-
-    def direction_params(self):
-        return [
-            self._weight_dir,
-            self._bias_dir
-        ]
 
     def forward(self, x):
         h = self.linear_in(x)
 
         if self.new_neurons is not None and self.was_split:
-            w_noise = F.linear(x,
+            w_noise = torch.nn.functional.linear(x,
                 self._weight_dir[:self.hidden_features],
                 self._bias_dir[:self.hidden_features]
             ) * self.new_neurons[:self.hidden_features]
@@ -63,7 +56,7 @@ class MLP(GrowingModule):
             num_novel = self.num_new_neurons - self.was_split * self.hidden_features
 
             if num_novel > 0:
-                h_novel = F.linear(x,
+                h_novel = torch.nn.functional.linear(x,
                     self._weight_dir[-num_novel:],
                     self._bias_dir[-num_novel:]
                 )
@@ -77,15 +70,15 @@ class MLP(GrowingModule):
         return y
 
     def grow(self,
-              split : bool = True,
-              num_novel : int = 0,
-              step_size = 1,
-              eps_split : float = 1e-1,
-              eps_novel : float = 1e-2,
-              eps_split_weight : Optional[float] = None,
-              eps_split_bias : Optional[float] = None,
-              eps_novel_weight : Optional[float] = None,
-              eps_novel_bias : Optional[float] = None):
+             split : bool = True,
+             num_novel : int = 0,
+             step_size = 1,
+             eps_split : float = 1e-1,
+             eps_novel : float = 1e-2,
+             eps_split_weight : Optional[float] = None,
+             eps_split_bias : Optional[float] = None,
+             eps_novel_weight : Optional[float] = None,
+             eps_novel_bias : Optional[float] = None):
 
         self.was_split = split
 
@@ -190,8 +183,5 @@ class MLP(GrowingModule):
             self.linear_in.weight = torch.nn.Parameter(weight_in)
             self.linear_in.bias = torch.nn.Parameter(bias_in)
             self.linear_out.weight = torch.nn.Parameter(weight_out)
-
-        # adjust features
-        self.hidden_features = self.linear_in.weight.size(0)
 
         self.reset_grow_state()
