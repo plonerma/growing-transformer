@@ -3,9 +3,6 @@ function. """
 
 import pytest
 
-from itertools import product
-from copy import deepcopy
-
 import torch
 
 from growing import MLP, ScaledDotProductAttention

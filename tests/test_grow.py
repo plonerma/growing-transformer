@@ -3,9 +3,6 @@ function. """
 
 import pytest
 
-from itertools import product
-from copy import deepcopy
-
 import torch
 
 from growing import MLP, ScaledDotProductAttention
@@ -32,14 +29,17 @@ def test_growth(grow_params, model_spec):
 
     model_type, model_args = model_spec
 
-    model_a = model_type(*model_args)
-    model_b = deepcopy(model_a)
+    model = model_type(*model_args)
 
-    model_b.grow(**grow_params)
+    x = torch.rand(64, 10, model.in_features)
 
-    x = torch.rand(64, 10, model_a.in_features)
+    y_a = model(x)
 
-    diff = torch.abs(model_a(x) - model_b(x))
+    model.grow(**grow_params)
+
+    y_b = model(x)
+
+    diff = torch.abs(y_a - y_b)
 
     # the change should be minor
     assert torch.all(diff < eps)

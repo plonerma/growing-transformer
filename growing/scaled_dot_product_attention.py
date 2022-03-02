@@ -38,19 +38,23 @@ class ScaledDotProductAttention(GrowingModule):
 
         # Batch (b) and head (h) dimensions remain intact
         # Query dimension (q) remains in the same place
-        einsum_str = 'qbhi,kbhi->bhqk'
+        # Embedding values (e) are used in actual dot product
+        einsum_str = 'qbhe,kbhe->bhqk'
         product = torch.einsum(einsum_str, q, k)
 
         if self.new_neurons is not None:
-            q_novel = torch.nn.functional.linear(x, self._weight_dir[0], self._bias_dir[0]).view(length, batch_size, self.heads, -1)
-
+            q_novel = torch.nn.functional.linear(x, self._weight_dir[0], self._bias_dir[0])
+            q_novel = q_novel.view(length, batch_size, self.heads, -1)
             q_novel = q_novel * self.new_neurons
 
-            k_novel = torch.nn.functional.linear(x, self._weight_dir[1], self._bias_dir[1]).view(length, batch_size, self.heads, -1)
+            k_novel = torch.nn.functional.linear(x, self._weight_dir[1], self._bias_dir[1])
+            k_novel = k_novel.view(length, batch_size, self.heads, -1)
 
             product = product + torch.einsum(einsum_str, q_novel, k_novel)
 
-        return torch.softmax(product  / torch.sqrt(torch.tensor(self.d_head)), axis=-1)
+        product = product / torch.sqrt(torch.tensor(self.d_head))
+
+        return torch.softmax(product, axis=-1)
 
     def grow(self,
              num_novel : int = 0,
@@ -105,8 +109,8 @@ class ScaledDotProductAttention(GrowingModule):
 
             # copy old neurons
 
-            q_weight[:, :self.d_head] = self.q_linear.weight.view(self.heads, self.d_head, -1)
-            k_weight[:, :self.d_head] = self.k_linear.weight.view(self.heads, self.d_head, -1)
+            q_weight[:, :self.d_head] = self.q_linear.weight.view(self.heads, self.d_head, self.d_model)
+            k_weight[:, :self.d_head] = self.k_linear.weight.view(self.heads, self.d_head, self.d_model)
             q_bias[:, :self.d_head] = self.q_linear.bias.view(self.heads, self.d_head)
             k_bias[:, :self.d_head] = self.k_linear.bias.view(self.heads, self.d_head)
 
@@ -130,15 +134,13 @@ class ScaledDotProductAttention(GrowingModule):
 
             scale = torch.sqrt(torch.tensor(1 + d_new / self.d_head))
 
-            q_weight /= scale
-            #k_weight /= scale
-            q_bias /= scale
-            #k_bias /= scale
+            q_weight *= scale
+            q_bias *= scale
 
             self.d_head = self.d_head + d_new
 
-            self.q_linear.weight = torch.nn.Parameter(q_weight.reshape(self.heads*self.d_head, -1))
-            self.k_linear.weight = torch.nn.Parameter(k_weight.reshape(self.heads*self.d_head, -1))
+            self.q_linear.weight = torch.nn.Parameter(q_weight.reshape(self.heads*self.d_head, self.d_model))
+            self.k_linear.weight = torch.nn.Parameter(k_weight.reshape(self.heads*self.d_head, self.d_model))
             self.q_linear.bias = torch.nn.Parameter(q_bias.reshape(self.heads*self.d_head))
             self.k_linear.bias = torch.nn.Parameter(k_bias.reshape(self.heads*self.d_head))
 

@@ -3,9 +3,6 @@ function. """
 
 import pytest
 
-from itertools import product
-from copy import deepcopy
-
 import torch
 
 from growing import MLP, ScaledDotProductAttention
@@ -41,20 +38,20 @@ def test_degrow(grow_params, model_spec):
 
     model_type, model_args = model_spec
 
-    model_a = model_type(*model_args)
+    model = model_type(*model_args)
 
-    sizes = model_a.grow(**grow_params)
+    x = torch.rand(64, 10, model.in_features)
 
-    model_b = deepcopy(model_a)
+    sizes = model.grow(**grow_params)
+
+    y_a = model(x)
 
     # degrow keeping all neurons
-    model_b.degrow(select_all(sizes))
+    model.degrow(select_all(sizes))
 
-    x = torch.rand(64, 10, model_a.in_features)
+    y_b = model(x)
 
-    diff = torch.abs(model_a(x) - model_b(x))
-
-    print(diff.max())
+    diff = torch.abs(y_a - y_b)
 
     assert torch.all(diff < eps)
 
@@ -72,17 +69,18 @@ def test_degrow_completely(grow_params, model_spec):
 
     model_type, model_args = model_spec
 
-    model_a = model_type(*model_args)
-    model_b = deepcopy(model_a)
+    model = model_type(*model_args)
 
-    model_b.grow(**grow_params)
+    x = torch.rand(64, 10, model.in_features)
+
+    y_a = model(x)
+
+    model.grow(**grow_params)
     # degrow deleting all recently grown neurons
-    model_b.degrow(torch.arange(0))
+    model.degrow(torch.arange(0))
 
-    x = torch.rand(64, 10, model_a.in_features)
+    y_b = model(x)
 
-    diff = torch.abs(model_a(x) - model_b(x))
-
-    print(diff.max())
+    diff = torch.abs(y_a - y_b)
 
     assert torch.all(diff < eps)
