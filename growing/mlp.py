@@ -13,14 +13,6 @@ class MLP(GrowingModule):
         self.linear_in = torch.nn.Linear(in_features, hidden_features)
         self.activation = activation
         self.linear_out = torch.nn.Linear(hidden_features, out_features)
-        self.hidden_features = hidden_features
-
-    def reset_grow_state(self):
-        super().reset_grow_state()
-
-        # adjust features
-        self.linear_in.out_features, self.linear_in.in_features = self.linear_in.weight.size()
-        self.linear_out.out_features, self.linear_out.in_features = self.linear_out.weight.size()
 
     @property
     def in_features(self):
@@ -78,7 +70,8 @@ class MLP(GrowingModule):
              eps_split_weight : Optional[float] = None,
              eps_split_bias : Optional[float] = None,
              eps_novel_weight : Optional[float] = None,
-             eps_novel_bias : Optional[float] = None):
+             eps_novel_bias : Optional[float] = None,
+             **kw):
 
         self.was_split = split
 
@@ -119,7 +112,7 @@ class MLP(GrowingModule):
             torch.nn.init.uniform_(
                 self._bias_dir[-num_novel:],
                 -e, e)
-        return num_new
+        return self.new_neurons.size()
 
     def degrow(self, selected : torch.Tensor):
         with torch.no_grad():
@@ -184,4 +177,7 @@ class MLP(GrowingModule):
             self.linear_in.bias = torch.nn.Parameter(bias_in)
             self.linear_out.weight = torch.nn.Parameter(weight_out)
 
+        # adjust features
+        self.linear_in.out_features, self.linear_in.in_features = self.linear_in.weight.size()
+        self.linear_out.out_features, self.linear_out.in_features = self.linear_out.weight.size()
         self.reset_grow_state()
