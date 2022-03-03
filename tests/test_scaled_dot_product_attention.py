@@ -2,13 +2,10 @@
 function. """
 
 import pytest
-
 import torch
+from .util import eps
 
 from growing import ScaledDotProductAttention
-
-
-eps = 1e-5
 
 
 def test_scaled_dot_product():

@@ -1,7 +1,7 @@
 import torch
 
 from .base import GrowingModule
-from .dot_product import DotProduct
+from . import ScaledDotProductAttention
 
 from contextlib import contextmanager
 from typing import Optional

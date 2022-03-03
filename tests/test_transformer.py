@@ -1,10 +1,9 @@
 import pytest
+import torch
+from .util import eps
 
 from growing import GrowingTransformer
 from transformers import BertConfig, BertModel
-
-
-eps = 1e-5
 
 
 @pytest.mark.skip(reason="not implemented yet")
