@@ -51,7 +51,7 @@ class SimpleModel(torch.nn.Module):
         with self.direction_grad_only():
             optimizer = torch.optim.RMSprop(self.direction_params(), lr=1e-3, momentum=0.1, alpha=0.9)
 
-            for _ in range(5): # batches
+            for _ in range(20): # batches
                 optimizer.zero_grad()
                 train_x, train_y = toy_data()
                 y = self(train_x)
@@ -70,7 +70,7 @@ class SimpleModel(torch.nn.Module):
         with self.new_grad_only():
             optimizer = torch.optim.RMSprop(self.new_neurons(), lr=1e-3, momentum=0.1, alpha=0.9)
 
-            for _ in range(5): # batches
+            for _ in range(20): # batches
                 optimizer.zero_grad()
                 train_x, train_y = toy_data()
                 y = self(train_x)
@@ -93,7 +93,7 @@ def toy_data(n=16):
     train_y += torch.sin(train_x)*0.8
     return train_x, train_y
 
-def growing_train(model, *, grow=None, lr=0.01, use_onecycle=False, num_batches=200, num_epochs=10):
+def growing_train(model, *, grow=None, lr=0.01, use_onecycle=False, num_batches=200, num_epochs=5):
 
     losses = list()
     criterion = torch.nn.MSELoss()
