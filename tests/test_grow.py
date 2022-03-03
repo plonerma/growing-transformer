@@ -5,12 +5,12 @@ import pytest
 
 import torch
 
-from growing import MLP, ScaledDotProductAttention
+from growing import MLP, ScaledDotProductAttention, MultiheadAttention
 
 
 eps = 1e-5
 
-test_models = [(MLP, (16, 8, 12)), (ScaledDotProductAttention, (16, 5, 7))]
+test_models = [(MLP, (16, 8, 12)), (ScaledDotProductAttention, (16, 5, 7)), (MultiheadAttention, (16, 5, 7))]
 
 
 @pytest.mark.parametrize("grow_params", [

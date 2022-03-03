@@ -5,7 +5,7 @@ import pytest
 
 import torch
 
-from growing import MLP, ScaledDotProductAttention
+from growing import ScaledDotProductAttention
 
 
 eps = 1e-5
