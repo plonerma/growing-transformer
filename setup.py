@@ -7,11 +7,13 @@ setup(
     author_email='growing_transformer@maxploner.de',
     packages=find_packages(where='src'),
     package_dir={'': 'src'},  # Optional
+    package_data={"src/growing_transformer": ["py.typed"]},
     description='Dynamically Growing Transformer Using Firefly Neural Architecture Descent',
     long_description=open('README.md').read(),
     long_description_content_type='text/markdown',
     install_requires=[
         "torch",
         "pytest",
+        "transformers"
     ],
 )

@@ -1,5 +1,6 @@
-.PHONY: venv test
+.PHONY: venv tests
 
-test:
+tests:
 	mypy -p tests
 	mypy -p growing_transformer
+	pytest
