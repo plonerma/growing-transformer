@@ -1,10 +1,15 @@
 import torch
 
-from typing import List, Mapping, Any
+from typing import List, Mapping, Any, Iterable, Optional
 from contextlib import contextmanager
 from abc import abstractmethod
 
 class GrowingModule(torch.nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.new_neurons: Optional[torch.nn.Parameter] = None
+        self.config = config
+
     @contextmanager
     def some_grad_only(self, *some_parameters):
         # temporarily save requires_grad for all parameters
@@ -25,14 +30,8 @@ class GrowingModule(torch.nn.Module):
         for p, rg in zip(self.parameters(), _requires_grad):
             p.requires_grad = rg
 
-    def direction_params(self):
-        return [
-            self._weight_dir,
-            self._bias_dir
-        ]
-
     @property
-    def num_new_neurons(self):
+    def num_new_neurons(self) -> int:
         """Return total number of neurons that were added."""
         if self.new_neurons is None:
             return 0
@@ -54,34 +53,45 @@ class GrowingModule(torch.nn.Module):
             if isinstance(child, GrowingModule):
                 yield child
 
-    def grow(self, kws : List[Mapping]) -> List[Any]:
-        sizes = [self._grow(**kws[0])]
+    def grow(self, step_size: float = 1e-1) -> List[Any]:
+        sizes = [self._grow(step_size)]
 
-        for kw, child in zip(kws[1:], self.growing_children()):
-            sizes.append(child.grow(kw))
+        for child in self.growing_children():
+            sizes.append(child.grow(step_size))
 
         return sizes
 
-    def degrow(self, selected : List[Any]):
+    def degrow(self, selected: List[Any]) -> None:
         self._degrow(selected[0])
 
         for s, child in zip(selected[1:], self.growing_children()):
             child.degrow(s)
 
     @abstractmethod
-    def _degrow(self, selected : torch.Tensor):
+    def _degrow(self, selected: torch.Tensor) -> None:
         pass
 
     @abstractmethod
-    def _grow(self,
-              split : bool = True,
-              num_novel : int = 0,
-              step_size = 1e-2,
-              **kwargs) -> torch.Size:
+    def _grow(self, step_size: float = 1e-1) -> torch.Size:
         pass
 
-    def select(self, k):
+    @abstractmethod
+    def _direction_params(self) -> Iterable[Optional[torch.nn.Parameter]]:
+        pass
+
+    def direction_params(self) -> List[torch.nn.Parameter]:
+        return [p for p in self._direction_params() if p is not None]
+
+    def select(self, k: int) -> torch.Tensor:
         assert self.new_neurons is not None
 
         # return indices of neurons with largest absolute gradient
         return torch.topk(torch.abs(self.new_neurons.grad), k).indices
+
+    def get_config(self, *args: str, default: Any = None):
+        for arg in args:
+            try:
+                return self.config[arg]
+            except KeyError:
+                pass
+        return default

@@ -20,7 +20,7 @@ def test_multihead_attention():
     growing_model = MultiheadAttention(embed_dim, 12, 64)
 
     # get state from that model
-    state = growing_model.state_dict(bert_like=True)
+    state = growing_model.bert_state_dict()
 
     # bert multihead attention block
     configuration = BertConfig()

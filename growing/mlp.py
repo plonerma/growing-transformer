@@ -3,49 +3,67 @@ from torch.nn import Parameter
 from torch.nn.init import uniform_
 
 from contextlib import contextmanager
-from typing import Optional
+from typing import Optional, List, Mapping, Any
 
 from .base import GrowingModule
 
 
 class MLP(GrowingModule):
-    def __init__(self, in_features : int, out_features : int, hidden_features : int, activation=torch.nn.Tanh()):
-        super().__init__()
+    def __init__(self,
+                 in_features: int,
+                 out_features: int,
+                 hidden_features: int,
+                 activation=torch.nn.Tanh(),
+                 config: Mapping[str, Any] = {}):
+        super().__init__(config)
 
         self.linear_in = torch.nn.Linear(in_features, hidden_features)
         self.activation = activation
         self.linear_out = torch.nn.Linear(hidden_features, out_features)
         self.reset_grow_state()
 
-    def reset_grow_state(self):
+    def reset_grow_state(self) -> None:
         # step size (used to calculate gradients for selecting kept neurons)
-        self.new_neurons : Optional[torch.nn.Parameter] = None
+        self.new_neurons: Optional[torch.nn.Parameter] = None
 
         # update directions (to be trained)
-        self._in_weight_split : Optional[torch.nn.Parameter] = None
-        self._in_bias_split : Optional[torch.nn.Parameter] = None
-        self._out_weight_novel : Optional[torch.nn.Parameter] = None
-        self._in_weight_novel : Optional[torch.nn.Parameter] = None
-        self._in_bias_novel : Optional[torch.nn.Parameter] = None
+        self._in_weight_split: Optional[torch.nn.Parameter] = None
+        self._in_bias_split: Optional[torch.nn.Parameter] = None
+        self._out_weight_novel: Optional[torch.nn.Parameter] = None
+        self._in_weight_novel: Optional[torch.nn.Parameter] = None
+        self._in_bias_novel: Optional[torch.nn.Parameter] = None
+
+    def _direction_params(self) -> List[Optional[torch.nn.Parameter]]:
+        return [
+            self._in_weight_split,
+            self._in_bias_split,
+            self._out_weight_novel,
+            self._in_weight_novel,
+            self._in_bias_novel,
+        ]
 
     @property
-    def in_features(self):
+    def in_features(self) -> int:
         return self.linear_in.in_features
 
     @property
-    def hidden_features(self):
+    def hidden_features(self) -> int:
         return self.linear_in.out_features
 
     @property
-    def out_features(self):
+    def out_features(self) -> int:
         return self.linear_out.out_features
 
-    def forward(self, x):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         h = self.linear_in(x)
 
         was_split = self.new_neurons is not None and self._in_weight_split is not None
 
         if was_split:
+            assert self.new_neurons is not None
+            assert self._in_weight_split is not None
+            assert self._in_bias_split is not None
+
             w_noise = torch.nn.functional.linear(x,
                 self._in_weight_split,
                 self._in_bias_split
@@ -64,6 +82,10 @@ class MLP(GrowingModule):
             num_novel = self.num_new_neurons - was_split * self.hidden_features
 
             if num_novel > 0:
+                assert self._in_weight_novel is not None
+                assert self._in_bias_novel is not None
+                assert self._out_weight_novel is not None
+
                 h_novel = torch.nn.functional.linear(x, self._in_weight_novel, self._in_bias_novel)
                 y_novel = self.activation(h_novel) * self.new_neurons[-num_novel:]
                 y_novel = torch.nn.functional.linear(y_novel, self._out_weight_novel)
@@ -71,22 +93,13 @@ class MLP(GrowingModule):
 
         return y
 
-    def _grow(self,
-             split : bool = True,
-             num_novel : int = 0,
-             step_size = 1,
-             eps_split : float = 1e-1,
-             eps_novel : float = 1e-1,
-             eps_split_weight : Optional[float] = None,
-             eps_split_bias : Optional[float] = None,
-             eps_novel_weight : Optional[float] = None,
-             eps_novel_bias : Optional[float] = None,
-             **kw) -> torch.Size:
-
-        eps_split_weight = eps_split_weight or eps_split
-        eps_split_bias = eps_split_bias or eps_split
-        eps_novel_weight = eps_novel_weight or eps_novel
-        eps_novel_bias = eps_novel_bias or eps_novel
+    def _grow(self, step_size: float = 1e-1) -> torch.Size:
+        split = self.get_config('split', default=True)
+        num_novel = self.get_config('num_novel', default=0)
+        eps_split_weight = self.get_config('eps_split_weight', 'eps_split', default=1e-1)
+        eps_split_bias = self.get_config('eps_split_bias', 'eps_split', default=1e-1)
+        eps_novel_weight = self.get_config('eps_novel_weight', 'eps_novel', default=1e-1)
+        eps_novel_bias =self.get_config('eps_novel_bias', 'eps_novel', default=1e-1)
 
         # add parameter to measure influence/gradient of adding new neurons
         self.new_neurons = Parameter(torch.ones(self.hidden_features * split + num_novel) * step_size,requires_grad=False)
@@ -108,9 +121,9 @@ class MLP(GrowingModule):
 
         return self.new_neurons.size()
 
-    def _degrow(self, selected : torch.Tensor):
+    def _degrow(self, selected: torch.Tensor) -> None:
         print(selected)
-        
+
         with torch.no_grad():
             assert self.new_neurons is not None
 
@@ -143,11 +156,15 @@ class MLP(GrowingModule):
             # copy old neurons (split neurons will be overwritten)
             weight_in[:num_old] = self.linear_in.weight
             bias_in[:num_old] = self.linear_in.bias
-            weight_out[:, :num_old] = self.linear_out.weight
+            weight_out[:,:num_old] = self.linear_out.weight
 
             # copy split neurons (with update direction)
 
             if num_split > 0:
+                assert self._in_weight_split is not None
+                assert self._in_bias_split is not None
+                assert self.new_neurons is not None
+
                 weight_noise =  self._in_weight_split[split] * self.new_neurons[split, None]
 
                 weight_in[split] = self.linear_in.weight[split] + weight_noise
@@ -163,6 +180,9 @@ class MLP(GrowingModule):
                 weight_out[:, num_old:num_old + num_split] = self.linear_out.weight[:, split] * 0.5
 
             if novel.size(0) > 0:
+                assert self._in_weight_novel is not None
+                assert self._in_bias_novel is not None
+                assert self._out_weight_novel is not None
 
                 # copy new neurons
                 weight_in[num_old + num_split:] = self._in_weight_novel[novel]

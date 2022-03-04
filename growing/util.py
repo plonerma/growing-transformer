@@ -1,4 +1,11 @@
-def map_attention_state(state, from_bert=False):
+import torch
+from typing import OrderedDict
+from collections import OrderedDict as odict
+
+
+def map_attention_state(state: OrderedDict[str, torch.Tensor],
+                        from_bert: bool = False
+                        ) -> OrderedDict[str, torch.Tensor]:
     state_map = {
         'self.query.weight': 'dot_product.query_linear.weight',
         'self.query.bias': 'dot_product.query_linear.bias',
@@ -12,7 +19,7 @@ def map_attention_state(state, from_bert=False):
         'output.LayerNorm.bias': 'layer_norm.bias',
     }
 
-    new_state = {}
+    new_state: OrderedDict[str, torch.Tensor] = odict()
 
     for k,v in state_map.items():
         if from_bert:

@@ -3,12 +3,17 @@ import torch
 from .base import GrowingModule
 
 from contextlib import contextmanager
-from typing import Optional
+from typing import Optional, Iterable, Mapping, Any
 
 
 class ScaledDotProductAttention(GrowingModule):
-    def __init__(self, d_model, heads, d_head, batch_first=True):
-        super().__init__()
+    def __init__(self,
+                 d_model: int,
+                 heads: int,
+                 d_head: int,
+                 batch_first: bool = True,
+                 config: Mapping[str, Any] = {}):
+        super().__init__(config)
 
         self.query_linear = torch.nn.Linear(d_model, heads*d_head)
         self.key_linear = torch.nn.Linear(d_model, heads*d_head)
@@ -19,24 +24,29 @@ class ScaledDotProductAttention(GrowingModule):
         self.batch_first = batch_first
         self.reset_grow_state()
 
-    def reset_grow_state(self):
+    def reset_grow_state(self) -> None:
         # step size (used to calculate gradients for selecting kept neurons)
         self.new_neurons = None
-        self.was_split = False
 
         # update directions (to be trained)
-        self._weight = None
-        self._bias = None
+        self._weight: Optional[torch.nn.Parameter] = None
+        self._bias: Optional[torch.nn.Parameter] = None
+
+    def _direction_params(self) -> Iterable[Optional[torch.nn.Parameter]]:
+        return [
+            self._weight,
+            self._bias,
+        ]
 
     @property
-    def d_model(self):
+    def d_model(self) -> int:
         return self.query_linear.weight.size(1)
 
     @property
-    def in_features(self):
+    def in_features(self) -> int:
         return self.d_model
 
-    def forward(self, x):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         if self.batch_first:
             x = x.transpose(1, 0)
 
@@ -50,9 +60,11 @@ class ScaledDotProductAttention(GrowingModule):
         # Query dimension (q) remains in the same place
         # Embedding values (e) are used in actual dot product
         einsum_str = 'qbhe,kbhe->bhqk'
-        product = torch.einsum(einsum_str, q, k)
+        product: torch.Tensor = torch.einsum(einsum_str, q, k)
 
         if self.new_neurons is not None:
+            assert self._weight is not None and self._bias is not None
+
             q_novel = torch.nn.functional.linear(x, self._weight[0], self._bias[0])
             q_novel = q_novel.view(length, batch_size, self.heads, -1)
             q_novel = q_novel * self.new_neurons
@@ -66,13 +78,11 @@ class ScaledDotProductAttention(GrowingModule):
 
         return torch.softmax(product, axis=-1)
 
-    def _grow(self,
-             num_novel : int = 0,
-             step_size = 1,
-             eps_novel : float = 1e-2,
-             eps_novel_weight : Optional[float] = None,
-             eps_novel_bias : Optional[float] = None,
-             **kw) -> torch.Size:
+    def _grow(self, step_size: float = 1e-1) -> torch.Size:
+        num_novel = self.get_config('num_novel', default=0)
+        eps_novel_weight = self.get_config('eps_novel_weight', 'eps_novel', default=1e-1)
+        eps_novel_bias =self.get_config('eps_novel_bias', 'eps_novel', default=1e-1)
+
         # add parameter to measure influence/gradient of adding new neurons
         self.new_neurons = torch.nn.Parameter(
             torch.ones(self.heads, num_novel) * step_size,
@@ -80,28 +90,28 @@ class ScaledDotProductAttention(GrowingModule):
         )
 
         # create update direction for weight and bias
-        self._weight = torch.nn.Parameter(torch.empty(
-            2, self.heads * num_novel, self.d_model
-        ), requires_grad=False)
+        self._weight = torch.nn.Parameter(
+            torch.empty(2, self.heads * num_novel, self.d_model),
+            requires_grad=False)
 
         self._bias = torch.nn.Parameter(torch.empty(
             2, self.heads * num_novel
         ), requires_grad=False)
 
-        e = eps_novel_weight or eps_novel
-        torch.nn.init.uniform_(
-            self._weight,
-            -e, e)
+        torch.nn.init.uniform_(self._weight, -eps_novel_weight, eps_novel_weight)
 
-        e = eps_novel_bias or eps_novel
-        torch.nn.init.uniform_(
-            self._bias,
-            -e, e)
+        torch.nn.init.uniform_(self._bias, -eps_novel_bias, eps_novel_bias)
 
         return self.new_neurons.size()
 
-    def _degrow(self, selected : torch.Tensor):
+    def _degrow(self, selected: torch.Tensor) -> None:
         with torch.no_grad():
+
+            if self.new_neurons is None:
+                return
+
+            assert self._weight is not None
+            assert self._bias is not None
 
             d_new = selected.size(0) // self.heads
 

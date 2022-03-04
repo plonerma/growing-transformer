@@ -22,13 +22,15 @@ def test_growth(grow_params, model_spec):
 
     model_type, model_args = model_spec
 
-    model = model_type(*model_args)
+    config = dict(grow_params)
+    step_size = config.pop('step_size')
+    model = model_type(*model_args, config=config)
 
     x = torch.rand(64, 10, model.in_features)
 
     y_a = model(x)
 
-    model.grow([grow_params])
+    model.grow(step_size)
 
     y_b = model(x)
 
