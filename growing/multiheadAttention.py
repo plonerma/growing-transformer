@@ -31,7 +31,7 @@ class MultiheadAttention(GrowingModule):
         # step size (used to calculate gradients for selecting kept neurons)
         self.new_neurons = None
 
-        # update directions (to be trained)
+        # update directions (to be trained) after growing
         self._value_weight: Optional[torch.nn.Parameter] = None
         self._value_bias: Optional[torch.nn.Parameter] = None
         self._output_weight: Optional[torch.nn.Parameter] = None
@@ -121,6 +121,7 @@ class MultiheadAttention(GrowingModule):
         with torch.no_grad():
 
             if selected.size(0) == 0:
+                self.reset_grow_state()
                 return
 
             assert selected.size(0) % self.heads == 0
@@ -147,13 +148,13 @@ class MultiheadAttention(GrowingModule):
             # copy new neurons
             selected_steps = self.new_neurons.view(-1)[selected].view(self.heads, -1)
 
-            value_weight[:, self.d_head:] = (
+            value_weight[:, self.d_head:, :] = (
                 self._value_weight.view(-1, self.d_model)[selected].view(self.heads, -1, self.d_model)
-                * selected_steps[..., None]
+                * selected_steps[:, :, None]
             )
             value_bias[:, self.d_head:] = self._value_bias.view(-1)[selected].view(self.heads, -1) * selected_steps
 
-            output_weight[..., self.d_head:] = self._value_weight.view(self.d_model, -1)[:, selected].view(self.d_model, self.heads, -1)
+            output_weight[..., self.d_head:] = self._output_weight.view(self.d_model, -1)[:, selected].view(self.d_model, self.heads, -1)
 
             self.d_head = self.d_head + d_new
 

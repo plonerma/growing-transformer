@@ -76,7 +76,7 @@ class ScaledDotProductAttention(GrowingModule):
 
         product = product / torch.sqrt(torch.tensor(self.d_head))
 
-        return torch.softmax(product, axis=-1)
+        return torch.softmax(product, dim=-1)
 
     def _grow(self, step_size: float = 1e-1) -> torch.Size:
         num_novel = self.get_config('num_novel', default=0)

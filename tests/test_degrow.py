@@ -18,6 +18,7 @@ def select_all(size):
     dict(split=False, num_novel=4, eps_split=.1, eps_novel=.2, step_size=.3),
     dict(split=True, num_novel=0, eps_split=.1, eps_novel=.2, step_size=.3),
     dict(split=False, num_novel=0, eps_split=.1, eps_novel=.2, step_size=.3),
+    dict(split=True, num_novel=4, eps_split=.1, eps_novel=.2, step_size=1.0),
 ])
 @with_test_models
 def test_degrow_to_grown(grow_params, model_spec):
