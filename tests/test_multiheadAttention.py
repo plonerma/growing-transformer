@@ -1,56 +1,59 @@
 import pytest
 import torch
 
-from .util import eps
 from growing import MultiheadAttention
 
 from transformers import BertConfig
 from transformers.models.bert.modeling_bert import BertAttention
 
+from .base import GrowingTest
 
-eps = 1e-5
 
-
-def test_multihead_attention():
-    embed_dim = 768
+class TestMultiheadAttention(GrowingTest):
+    embed_dim = 64
     batches = 16
-    length = 512
+    length = 32
 
-    # initialize growing multihead attention block
-    growing_model = MultiheadAttention(embed_dim, 12, 64)
+    num_heads = 4
+    d_head = 16
 
-    # get state from that model
-    state = growing_model.bert_state_dict()
-
-    # bert multihead attention block
-    configuration = BertConfig()
-
-    print(configuration)
-
-    bert_attention = BertAttention(configuration)
-
-    assert (bert_attention.state_dict().keys() == state.keys())
-
-    # load state for growing model into torch model
-    bert_attention.load_state_dict(state)
-
-    # compare the function of the two transformers
-    bert_attention.eval()
-    growing_model.eval()
+    def new_model(self, config):
+        return MultiheadAttention(self.embed_dim, self.num_heads, self.d_head, config=config)
 
 
-    x = torch.zeros(1, 4, embed_dim)
-    #x = torch.rand(batches, length, embed_dim)
+    def test_function(self):
+        # initialize growing multihead attention block
+        growing_model = self.new_model({})
 
-    y_a, attn_a = growing_model(x, return_attention=True)
-    y_b, attn_b = bert_attention(x, output_attentions=True)
+        # get state from that model
+        state = growing_model.bert_state_dict()
 
-    assert torch.all(torch.abs(attn_a - attn_b) < eps)
+        for k, v in state.items():
+            print(k, v.size())
 
-    print("-----")
-    print(attn_a)
-    print(y_a)
-    print(y_b)
-    print(y_a - y_b)
+        # bert multihead attention block
 
-    assert torch.all(torch.abs(y_a - y_b) < eps)
+        configuration = BertConfig(hidden_size=self.embed_dim, num_attention_heads=self.num_heads)
+
+        print(configuration)
+
+        bert_attention = BertAttention(configuration)
+
+        assert (bert_attention.state_dict().keys() == state.keys())
+
+        # load state for growing model into torch model
+        bert_attention.load_state_dict(state)
+
+        # compare the function of the two transformers
+        bert_attention.eval()
+        growing_model.eval()
+
+
+        x = self.random_batch()
+        #x = torch.rand(batches, length, embed_dim)
+
+        y_a, attn_a = growing_model(x, return_attention=True)
+        y_b, attn_b = bert_attention(x, output_attentions=True)
+
+        assert torch.all(torch.abs(attn_a - attn_b) < 1e-5)
+        assert torch.all(torch.abs(y_a - y_b) < 1e-5)

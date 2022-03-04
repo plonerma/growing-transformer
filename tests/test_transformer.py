@@ -1,6 +1,5 @@
 import pytest
 import torch
-from .util import eps
 
 from growing import GrowingTransformer
 from transformers import BertConfig, BertModel
