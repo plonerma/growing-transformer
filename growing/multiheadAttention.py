@@ -1,7 +1,10 @@
 import torch
+from torch import Tensor
+from torch.nn import Parameter, Linear, LayerNorm
+from torch.nn.init import uniform_
 
 from contextlib import contextmanager
-from typing import Optional
+from typing import Optional, List, Iterable, OrderedDict, Tuple, Union, Mapping, Any
 
 from .base import GrowingModule
 from . import ScaledDotProductAttention
@@ -9,84 +12,153 @@ from .util import map_attention_state
 
 
 class MultiheadAttention(GrowingModule):
-    def __init__(self, d_model, heads, d_head, config={}):
-        super().__init__()
+    def __init__(self, d_model: int, heads: int, d_head: int, config: Mapping[str, Any] = {}):
+        super().__init__(config)
 
         self.dot_product = ScaledDotProductAttention(d_model, heads, d_head)
 
-        self.value_linear = torch.nn.Linear(d_model, heads*d_head)
-        self.output_linear = torch.nn.Linear(heads*d_head, d_model)
+        self.value_linear = Linear(d_model, heads*d_head)
+        self.output_linear = Linear(heads*d_head, d_model)
 
-        self.layer_norm = torch.nn.LayerNorm(d_model, eps=config.get('layer_norm_eps', 1e-12))
+        self.layer_norm = LayerNorm(d_model, eps=config.get('layer_norm_eps', 1e-12))
 
         self.heads = heads
         self.d_head = d_head
         self.d_model = d_model
+        self.reset_grow_state()
 
-    def reset_grow_state(self):
-        super().reset_grow_state()
+    def reset_grow_state(self) -> None:
+        # step size (used to calculate gradients for selecting kept neurons)
+        self.new_neurons = None
 
         # update directions (to be trained)
-        self._weight_dir = None
-        self._bias_dir = None
+        self._value_weight: Optional[torch.nn.Parameter] = None
+        self._value_bias: Optional[torch.nn.Parameter] = None
+        self._output_weight: Optional[torch.nn.Parameter] = None
 
-    def direction_params(self):
+    def _direction_params(self) -> Iterable[Optional[torch.nn.Parameter]]:
         return [
-            self._weight_dir,
-            self._bias_dir
+            self._value_weight,
+            self._value_bias,
+            self._output_weight,
         ]
 
-    def state_dict(self, bert_like=False):
-        state = super().state_dict()
+    def bert_state_dict(self) -> OrderedDict[str, Tensor]:
+        return map_attention_state(self.state_dict(), from_bert=False)
 
-        if bert_like:
-            state = map_attention_state(state, from_bert=False)
-
-        return state
-
-    def load_state_dict(self, state, bert_like=False):
-        if bert_like:
-            state = map_attention_state(state, from_bert=True)
-        super().load_state_dict(state)
+    def load_bert_state_dict(self, state: OrderedDict[str, Tensor]) -> None:
+        state = map_attention_state(state, from_bert=True)
+        self.load_state_dict(state)
 
     @property
-    def in_features(self):
+    def in_features(self) -> int:
         return self.d_model
 
-    def forward(self, x, return_attention=False):
+    def forward(self,
+            x: Tensor,
+            return_attention: bool = False
+            ) -> Union[Tensor, Tuple[Tensor, Tensor]]:
         batch, length, _ = x.size()
 
         attention = self.dot_product(x)
 
         value = self.value_linear(x).view(batch, length, self.heads, self.d_head)
 
-        print(attention.size(), value.size())
-
-        out = torch.einsum('bhqk,bkhe->bqhe', attention, value).reshape(batch, length, -1)
-
-        print("attention out", out)
+        einsum_str = 'bhqk,bkhe->bqhe'
+        out = torch.einsum(einsum_str, attention, value).reshape(batch, length, -1)
 
         out = self.output_linear(out)
 
-        print("linear out", out)
+        if self.new_neurons is not None:
+            assert self._value_weight is not None
+            assert self._value_bias is not None
+            assert self._output_weight is not None
+
+            value_novel = torch.nn.functional.linear(x, self._value_weight, self._value_bias)
+            value_novel = value_novel.view(batch, length, self.heads, -1)
+
+            out_novel = torch.einsum(einsum_str, attention, value_novel)
+            out_novel = out_novel * self.new_neurons[None, None, :, :]
+            out_novel = out_novel.reshape(batch, length, -1)
+
+            # linear transform (like output_linear)
+            out_novel = torch.nn.functional.linear(out_novel, self._output_weight)
+
+            out += out_novel
 
         out = self.layer_norm(out + x)
-
-        print("layer norm out", out)
 
         if not return_attention:
             return out
         else:
             return out, attention
 
-    def grow(self,
-             num_novel : int = 0,
-             step_size = 1,
-             eps_novel : float = 1e-2,
-             eps_novel_weight : Optional[float] = None,
-             eps_novel_bias : Optional[float] = None,
-             **kw):
-        raise NotImplementedError
+    def _grow(self, step_size: float = 1e-1) -> torch.Size:
+        num_novel = self.get_config('num_novel', default=0)
+        eps_novel_weight = self.get_config('eps_novel_weight', 'eps_novel', default=1e-1)
+        eps_novel_bias =self.get_config('eps_novel_bias', 'eps_novel', default=1e-1)
 
-    def degrow(self, selected : torch.Tensor):
-        raise NotImplementedError
+        # add parameter to measure influence/gradient of adding new neurons
+        self.new_neurons = Parameter(
+            torch.ones(self.heads, num_novel) * step_size,
+            requires_grad=False
+        )
+
+        # create update direction for weight and bias
+        self._output_weight = None
+
+        self._value_weight = Parameter(torch.empty(self.heads * num_novel, self.d_model), requires_grad=False)
+        self._value_bias = Parameter(torch.empty(self.heads * num_novel), requires_grad=False)
+        self._output_weight = Parameter(torch.empty(self.d_model, self.heads * num_novel), requires_grad=False)
+
+        uniform_(self._value_weight, -eps_novel_weight, eps_novel_weight)
+        uniform_(self._output_weight, -eps_novel_weight, eps_novel_weight)
+        uniform_(self._value_bias, -eps_novel_bias, eps_novel_bias)
+
+        return self.new_neurons.size()
+
+    def _degrow(self, selected: Tensor) -> None:
+        with torch.no_grad():
+
+            if selected.size(0) == 0:
+                return
+
+            assert selected.size(0) % self.heads == 0
+
+            assert self.new_neurons is not None
+            assert self._value_weight is not None
+            assert self._value_bias is not None
+            assert self._output_weight is not None
+
+            d_new = selected.size(0) // self.heads
+
+            value_weight = torch.empty(self.heads, self.d_head + d_new, self.d_model)
+            value_bias = torch.empty(self.heads, self.d_head + d_new)
+
+            output_weight = torch.empty(self.d_model, self.heads, self.d_head + d_new)
+
+            # copy old neurons
+
+            value_weight[:, :self.d_head] = self.value_linear.weight.view(self.heads, self.d_head, self.d_model)
+            value_bias[:, :self.d_head] = self.value_linear.bias.view(self.heads, self.d_head)
+
+            output_weight[..., :self.d_head] = self.output_linear.weight.view(self.d_model, self.heads, self.d_head)
+
+            # copy new neurons
+            selected_steps = self.new_neurons.view(-1)[selected].view(self.heads, -1)
+
+            value_weight[:, self.d_head:] = (
+                self._value_weight.view(-1, self.d_model)[selected].view(self.heads, -1, self.d_model)
+                * selected_steps[..., None]
+            )
+            value_bias[:, self.d_head:] = self._value_bias.view(-1)[selected].view(self.heads, -1) * selected_steps
+
+            output_weight[..., self.d_head:] = self._value_weight.view(self.d_model, -1)[:, selected].view(self.d_model, self.heads, -1)
+
+            self.d_head = self.d_head + d_new
+
+            self.value_linear.weight = torch.nn.Parameter(value_weight.reshape(self.heads*self.d_head, self.d_model))
+            self.value_linear.bias = torch.nn.Parameter(value_bias.reshape(self.heads*self.d_head))
+            self.output_linear.weight = torch.nn.Parameter(output_weight.reshape(self.d_model, self.heads*self.d_head))
+
+        self.reset_grow_state()
