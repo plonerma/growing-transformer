@@ -1,6 +1,6 @@
 import pytest
 
-from growing import MLP
+from growing_transformer import MLP
 
 from .base import SplittingTest
 

@@ -1,7 +1,7 @@
 import pytest
 import torch
 
-from growing import MultiheadAttention
+from growing_transformer import MultiheadAttention
 
 from transformers import BertConfig
 from transformers.models.bert.modeling_bert import BertAttention

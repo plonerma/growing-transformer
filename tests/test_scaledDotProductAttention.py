@@ -4,7 +4,7 @@ function. """
 import pytest
 import torch
 
-from growing import ScaledDotProductAttention
+from growing_transformer import ScaledDotProductAttention
 
 from .base import GrowingTest
 

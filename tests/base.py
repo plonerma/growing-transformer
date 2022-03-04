@@ -3,7 +3,7 @@ import torch
 
 from typing import Tuple
 
-from growing import GrowingModule
+from growing_transformer import GrowingModule
 
 from abc import abstractmethod
 

@@ -1,7 +1,7 @@
 import pytest
 import torch
 
-from growing import GrowingTransformer
+from growing_transformer import GrowingTransformer
 from transformers import BertConfig, BertModel
 
 
