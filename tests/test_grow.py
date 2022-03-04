@@ -28,7 +28,7 @@ def test_growth(grow_params, model_spec):
 
     y_a = model(x)
 
-    model.grow(**grow_params)
+    model.grow([grow_params])
 
     y_b = model(x)
 

@@ -1,12 +1,10 @@
 import torch
+
+from typing import List, Mapping, Any
 from contextlib import contextmanager
 from abc import abstractmethod
 
 class GrowingModule(torch.nn.Module):
-    def __init__(self):
-        super().__init__()
-        self.reset_grow_state()
-
     @contextmanager
     def some_grad_only(self, *some_parameters):
         # temporarily save requires_grad for all parameters
@@ -26,15 +24,6 @@ class GrowingModule(torch.nn.Module):
         # reset requires_grad of all parameters
         for p, rg in zip(self.parameters(), _requires_grad):
             p.requires_grad = rg
-
-    def reset_grow_state(self):
-        # step size (used to calculate gradients for selecting kept neurons)
-        self.new_neurons = None
-        self.was_split = False
-
-        # update directions (to be trained)
-        self._weight_dir = None
-        self._bias_dir = None
 
     def direction_params(self):
         return [
@@ -60,16 +49,35 @@ class GrowingModule(torch.nn.Module):
         with self.some_grad_only(*self.direction_params()):
             yield
 
+    def growing_children(self):
+        for child in self.children():
+            if isinstance(child, GrowingModule):
+                yield child
+
+    def grow(self, kws : List[Mapping]) -> List[Any]:
+        sizes = [self._grow(**kws[0])]
+
+        for kw, child in zip(kws[1:], self.growing_children()):
+            sizes.append(child.grow(kw))
+
+        return sizes
+
+    def degrow(self, selected : List[Any]):
+        self._degrow(selected[0])
+
+        for s, child in zip(selected[1:], self.growing_children()):
+            child.degrow(s)
+
     @abstractmethod
-    def degrow(self, selected : torch.Tensor):
+    def _degrow(self, selected : torch.Tensor):
         pass
 
     @abstractmethod
-    def grow(self,
+    def _grow(self,
               split : bool = True,
               num_novel : int = 0,
               step_size = 1e-2,
-              **kwargs):
+              **kwargs) -> torch.Size:
         pass
 
     def select(self, k):

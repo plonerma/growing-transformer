@@ -10,10 +10,7 @@ def select_all(size):
     """Return indices for all possible neurons."""
     if isinstance(size, torch.Size):
         return torch.arange(size.numel())
-    try:
-        return [select_all(s) for s in size]
-    except TypeError:
-        return torch.arange(size)
+    return [select_all(s) for s in size]
 
 
 @pytest.mark.parametrize("grow_params", [
@@ -35,7 +32,9 @@ def test_degrow_to_grown(grow_params, model_spec):
 
     x = torch.rand(64, 10, model.in_features)
 
-    sizes = model.grow(**grow_params)
+    sizes = model.grow([grow_params])
+
+    print(sizes)
 
     y_a = model(x)
 
@@ -47,6 +46,13 @@ def test_degrow_to_grown(grow_params, model_spec):
     diff = torch.abs(y_a - y_b)
 
     assert torch.all(diff < eps)
+
+
+def select_none(size):
+    """Return indices for all possible neurons."""
+    if isinstance(size, torch.Size):
+        return torch.arange(0)
+    return [select_none(s) for s in size]
 
 
 @pytest.mark.parametrize("grow_params", [
@@ -68,9 +74,10 @@ def test_degrow_to_original(grow_params, model_spec):
 
     y_a = model(x)
 
-    model.grow(**grow_params)
+    sizes = model.grow([grow_params])
     # degrow deleting all recently grown neurons
-    model.degrow(torch.arange(0))
+
+    model.degrow(select_none(sizes))
 
     y_b = model(x)
 

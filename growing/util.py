@@ -1,9 +1,9 @@
 def map_attention_state(state, from_bert=False):
     state_map = {
-        'self.query.weight': 'dot_product.q_linear.weight',
-        'self.query.bias': 'dot_product.q_linear.bias',
-        'self.key.weight': 'dot_product.k_linear.weight',
-        'self.key.bias': 'dot_product.k_linear.bias',
+        'self.query.weight': 'dot_product.query_linear.weight',
+        'self.query.bias': 'dot_product.query_linear.bias',
+        'self.key.weight': 'dot_product.key_linear.weight',
+        'self.key.bias': 'dot_product.key_linear.bias',
         'self.value.weight': 'value_linear.weight',
         'self.value.bias': 'value_linear.bias',
         'output.dense.weight': 'output_linear.weight',

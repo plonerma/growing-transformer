@@ -22,14 +22,14 @@ def test_scaled_dot_product():
 
 
     in_proj_bias = torch.cat([
-        dp.q_linear.bias,
-        dp.k_linear.bias,
+        dp.query_linear.bias,
+        dp.key_linear.bias,
         torch.zeros(embed_dim),
     ])
 
     in_proj_weight = torch.cat([
-        dp.q_linear.weight,
-        dp.k_linear.weight,
+        dp.query_linear.weight,
+        dp.key_linear.weight,
         torch.eye(embed_dim),
     ])
 

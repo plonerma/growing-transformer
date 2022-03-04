@@ -10,17 +10,27 @@ class ScaledDotProductAttention(GrowingModule):
     def __init__(self, d_model, heads, d_head, batch_first=True):
         super().__init__()
 
-        self.q_linear = torch.nn.Linear(d_model, heads*d_head)
-        self.k_linear = torch.nn.Linear(d_model, heads*d_head)
+        self.query_linear = torch.nn.Linear(d_model, heads*d_head)
+        self.key_linear = torch.nn.Linear(d_model, heads*d_head)
 
         self.heads = heads
 
         self.d_head = d_head
         self.batch_first = batch_first
+        self.reset_grow_state()
+
+    def reset_grow_state(self):
+        # step size (used to calculate gradients for selecting kept neurons)
+        self.new_neurons = None
+        self.was_split = False
+
+        # update directions (to be trained)
+        self._weight = None
+        self._bias = None
 
     @property
     def d_model(self):
-        return self.q_linear.weight.size(1)
+        return self.query_linear.weight.size(1)
 
     @property
     def in_features(self):
@@ -32,9 +42,9 @@ class ScaledDotProductAttention(GrowingModule):
 
         length, batch_size, _ = x.size()
 
-        q = self.q_linear(x).view(length, batch_size, self.heads, -1)
+        q = self.query_linear(x).view(length, batch_size, self.heads, -1)
 
-        k = self.k_linear(x).view(length, batch_size, self.heads, -1)
+        k = self.key_linear(x).view(length, batch_size, self.heads, -1)
 
         # Batch (b) and head (h) dimensions remain intact
         # Query dimension (q) remains in the same place
@@ -43,11 +53,11 @@ class ScaledDotProductAttention(GrowingModule):
         product = torch.einsum(einsum_str, q, k)
 
         if self.new_neurons is not None:
-            q_novel = torch.nn.functional.linear(x, self._weight_dir[0], self._bias_dir[0])
+            q_novel = torch.nn.functional.linear(x, self._weight[0], self._bias[0])
             q_novel = q_novel.view(length, batch_size, self.heads, -1)
             q_novel = q_novel * self.new_neurons
 
-            k_novel = torch.nn.functional.linear(x, self._weight_dir[1], self._bias_dir[1])
+            k_novel = torch.nn.functional.linear(x, self._weight[1], self._bias[1])
             k_novel = k_novel.view(length, batch_size, self.heads, -1)
 
             product = product + torch.einsum(einsum_str, q_novel, k_novel)
@@ -56,13 +66,13 @@ class ScaledDotProductAttention(GrowingModule):
 
         return torch.softmax(product, axis=-1)
 
-    def grow(self,
+    def _grow(self,
              num_novel : int = 0,
              step_size = 1,
              eps_novel : float = 1e-2,
              eps_novel_weight : Optional[float] = None,
              eps_novel_bias : Optional[float] = None,
-             **kw):
+             **kw) -> torch.Size:
         # add parameter to measure influence/gradient of adding new neurons
         self.new_neurons = torch.nn.Parameter(
             torch.ones(self.heads, num_novel) * step_size,
@@ -70,27 +80,27 @@ class ScaledDotProductAttention(GrowingModule):
         )
 
         # create update direction for weight and bias
-        self._weight_dir = torch.nn.Parameter(torch.empty(
+        self._weight = torch.nn.Parameter(torch.empty(
             2, self.heads * num_novel, self.d_model
         ), requires_grad=False)
 
-        self._bias_dir = torch.nn.Parameter(torch.empty(
+        self._bias = torch.nn.Parameter(torch.empty(
             2, self.heads * num_novel
         ), requires_grad=False)
 
         e = eps_novel_weight or eps_novel
         torch.nn.init.uniform_(
-            self._weight_dir,
+            self._weight,
             -e, e)
 
         e = eps_novel_bias or eps_novel
         torch.nn.init.uniform_(
-            self._bias_dir,
+            self._bias,
             -e, e)
 
         return self.new_neurons.size()
 
-    def degrow(self, selected : torch.Tensor):
+    def _degrow(self, selected : torch.Tensor):
         with torch.no_grad():
 
             d_new = selected.size(0) // self.heads
@@ -109,23 +119,23 @@ class ScaledDotProductAttention(GrowingModule):
 
             # copy old neurons
 
-            q_weight[:, :self.d_head] = self.q_linear.weight.view(self.heads, self.d_head, self.d_model)
-            k_weight[:, :self.d_head] = self.k_linear.weight.view(self.heads, self.d_head, self.d_model)
-            q_bias[:, :self.d_head] = self.q_linear.bias.view(self.heads, self.d_head)
-            k_bias[:, :self.d_head] = self.k_linear.bias.view(self.heads, self.d_head)
+            q_weight[:, :self.d_head] = self.query_linear.weight.view(self.heads, self.d_head, self.d_model)
+            k_weight[:, :self.d_head] = self.key_linear.weight.view(self.heads, self.d_head, self.d_model)
+            q_bias[:, :self.d_head] = self.query_linear.bias.view(self.heads, self.d_head)
+            k_bias[:, :self.d_head] = self.key_linear.bias.view(self.heads, self.d_head)
 
             # copy new neurons
             selected_steps = self.new_neurons.view(-1)[selected].view(self.heads, -1)
 
             # temporarily merge heads and output dimension
-            selected_weight = self._weight_dir.view(2, -1, self.d_model)
+            selected_weight = self._weight.view(2, -1, self.d_model)
             # only use selected neurons
             selected_weight = selected_weight[:, selected]
             # split up dimensions again
             selected_weight = selected_weight.view(2, self.heads, -1, self.d_model)
 
             # same for bias
-            selected_bias = self._bias_dir.view(2, -1)[:, selected].view(2, self.heads, -1)
+            selected_bias = self._bias.view(2, -1)[:, selected].view(2, self.heads, -1)
 
             q_weight[:, self.d_head:] = selected_weight[0] * selected_steps[..., None]
             k_weight[:, self.d_head:] = selected_weight[1]
@@ -139,9 +149,9 @@ class ScaledDotProductAttention(GrowingModule):
 
             self.d_head = self.d_head + d_new
 
-            self.q_linear.weight = torch.nn.Parameter(q_weight.reshape(self.heads*self.d_head, self.d_model))
-            self.k_linear.weight = torch.nn.Parameter(k_weight.reshape(self.heads*self.d_head, self.d_model))
-            self.q_linear.bias = torch.nn.Parameter(q_bias.reshape(self.heads*self.d_head))
-            self.k_linear.bias = torch.nn.Parameter(k_bias.reshape(self.heads*self.d_head))
+            self.query_linear.weight = torch.nn.Parameter(q_weight.reshape(self.heads*self.d_head, self.d_model))
+            self.key_linear.weight = torch.nn.Parameter(k_weight.reshape(self.heads*self.d_head, self.d_model))
+            self.query_linear.bias = torch.nn.Parameter(q_bias.reshape(self.heads*self.d_head))
+            self.key_linear.bias = torch.nn.Parameter(k_bias.reshape(self.heads*self.d_head))
 
         self.reset_grow_state()
