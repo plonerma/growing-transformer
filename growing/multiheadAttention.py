@@ -6,8 +6,7 @@ from torch.nn.init import uniform_
 from contextlib import contextmanager
 from typing import Optional, List, Iterable, OrderedDict, Tuple, Union, Mapping, Any
 
-from .base import GrowingModule
-from . import ScaledDotProductAttention
+from . import GrowingModule, ScaledDotProductAttention
 from .util import map_attention_state
 
 
@@ -93,7 +92,7 @@ class MultiheadAttention(GrowingModule):
         else:
             return out, attention
 
-    def _grow(self, step_size: float = 1e-1) -> torch.Size:
+    def grow(self, step_size: float = 1e-1) -> torch.Size:
         num_novel = self.get_config('num_novel', default=0)
         eps_novel_weight = self.get_config('eps_novel_weight', 'eps_novel', default=1e-1)
         eps_novel_bias =self.get_config('eps_novel_bias', 'eps_novel', default=1e-1)
@@ -117,7 +116,7 @@ class MultiheadAttention(GrowingModule):
 
         return self.new_neurons.size()
 
-    def _degrow(self, selected: Tensor) -> None:
+    def degrow(self, selected: Tensor) -> None:
         with torch.no_grad():
 
             if selected.size(0) == 0:

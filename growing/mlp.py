@@ -5,7 +5,7 @@ from torch.nn.init import uniform_
 from contextlib import contextmanager
 from typing import Optional, List, Mapping, Any
 
-from .base import GrowingModule
+from . import GrowingModule
 
 
 class MLP(GrowingModule):
@@ -93,7 +93,7 @@ class MLP(GrowingModule):
 
         return y
 
-    def _grow(self, step_size: float = 1e-1) -> torch.Size:
+    def grow(self, step_size: float = 1e-1) -> torch.Size:
         split = self.get_config('split', default=True)
         num_novel = self.get_config('num_novel', default=0)
         eps_split_weight = self.get_config('eps_split_weight', 'eps_split', default=1e-1)
@@ -121,7 +121,7 @@ class MLP(GrowingModule):
 
         return self.new_neurons.size()
 
-    def _degrow(self, selected: torch.Tensor) -> None:
+    def degrow(self, selected: torch.Tensor) -> None:
         print(selected)
 
         with torch.no_grad():

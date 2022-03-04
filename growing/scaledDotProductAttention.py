@@ -1,6 +1,6 @@
 import torch
 
-from .base import GrowingModule
+from . import GrowingModule
 
 from contextlib import contextmanager
 from typing import Optional, Iterable, Mapping, Any
@@ -78,7 +78,7 @@ class ScaledDotProductAttention(GrowingModule):
 
         return torch.softmax(product, dim=-1)
 
-    def _grow(self, step_size: float = 1e-1) -> torch.Size:
+    def grow(self, step_size: float = 1e-1) -> torch.Size:
         num_novel = self.get_config('num_novel', default=0)
         eps_novel_weight = self.get_config('eps_novel_weight', 'eps_novel', default=1e-1)
         eps_novel_bias =self.get_config('eps_novel_bias', 'eps_novel', default=1e-1)
@@ -104,7 +104,7 @@ class ScaledDotProductAttention(GrowingModule):
 
         return self.new_neurons.size()
 
-    def _degrow(self, selected: torch.Tensor) -> None:
+    def degrow(self, selected: torch.Tensor) -> None:
         with torch.no_grad():
 
             if self.new_neurons is None:
