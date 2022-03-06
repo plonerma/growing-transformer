@@ -18,7 +18,7 @@ class TestMultiheadAttention(GrowingTest):
     d_head = 16
 
     def new_model(self, config):
-        return MultiheadAttention(self.embed_dim, self.num_heads, self.d_head, config=config)
+        return MultiheadAttention(self.embed_dim, self.num_heads, self.d_head, config=config, bert_state_dict=True)
 
 
     def test_function(self):
@@ -26,7 +26,7 @@ class TestMultiheadAttention(GrowingTest):
         growing_model = self.new_model({})
 
         # get state from that model
-        state = growing_model.bert_state_dict()
+        state = growing_model.state_dict()
 
         for k, v in state.items():
             print(k, v.size())

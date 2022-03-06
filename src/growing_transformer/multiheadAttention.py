@@ -7,11 +7,24 @@ from contextlib import contextmanager
 from typing import Optional, List, Iterable, OrderedDict, Tuple, Union, Mapping, Any
 
 from . import GrowingModule, ScaledDotProductAttention
-from .util import map_attention_state
+
+
+_bert_state_dict_map = {
+    'self.query.weight': 'dot_product.query_linear.weight',
+    'self.query.bias': 'dot_product.query_linear.bias',
+    'self.key.weight': 'dot_product.key_linear.weight',
+    'self.key.bias': 'dot_product.key_linear.bias',
+    'self.value.weight': 'value_linear.weight',
+    'self.value.bias': 'value_linear.bias',
+    'output.dense.weight': 'output_linear.weight',
+    'output.dense.bias': 'output_linear.bias',
+    'output.LayerNorm.weight': 'layer_norm.weight',
+    'output.LayerNorm.bias': 'layer_norm.bias',
+}
 
 
 class MultiheadAttention(GrowingModule):
-    def __init__(self, d_model: int, heads: int, d_head: int, config: Mapping[str, Any] = {}):
+    def __init__(self, d_model: int, heads: int, d_head: int, config: Mapping[str, Any] = {}, bert_state_dict=False):
         super().__init__(config)
 
         self.dot_product = ScaledDotProductAttention(d_model, heads, d_head)
@@ -24,6 +37,11 @@ class MultiheadAttention(GrowingModule):
         self.heads = heads
         self.d_head = d_head
         self.d_model = d_model
+
+        if bert_state_dict:
+            self._register_state_dict_hook(self._bert_state_dict_hook)
+            self._register_load_state_dict_pre_hook(self._load_bert_state_dict_pre_hook)
+
         self.reset_grow_state()
 
     def reset_grow_state(self) -> None:
@@ -41,13 +59,6 @@ class MultiheadAttention(GrowingModule):
             self._value_bias,
             self._output_weight,
         ]
-
-    def bert_state_dict(self) -> OrderedDict[str, Tensor]:
-        return map_attention_state(self.state_dict(), from_bert=False)
-
-    def load_bert_state_dict(self, state: OrderedDict[str, Tensor]) -> None:
-        state = map_attention_state(state, from_bert=True)
-        self.load_state_dict(state)
 
     @property
     def in_features(self) -> int:
@@ -162,3 +173,14 @@ class MultiheadAttention(GrowingModule):
             self.output_linear.weight = torch.nn.Parameter(output_weight.reshape(self.d_model, self.heads*self.d_head))
 
         self.reset_grow_state()
+
+    @staticmethod
+    def _bert_state_dict_hook(self, state_dict, prefix, local_metadata):
+        for k,v in _bert_state_dict_map.items():
+            state_dict[prefix + k] = state_dict[prefix + v]
+            del state_dict[prefix + v]
+
+    def _load_bert_state_dict_pre_hook(self, state_dict, prefix, *_):
+        for k,v in _bert_state_dict_map.items():
+            state_dict[prefix + v] = state_dict[prefix + k]
+            del state_dict[prefix + k]
