@@ -13,7 +13,8 @@ setup(
     long_description_content_type='text/markdown',
     install_requires=[
         "torch",
+        "transformers",
         "pytest",
-        "transformers"
+        "mypy",
     ],
 )
