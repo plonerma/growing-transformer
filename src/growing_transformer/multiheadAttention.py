@@ -24,7 +24,7 @@ _bert_state_dict_map = {
 
 
 class MultiheadAttention(GrowingModule):
-    def __init__(self, d_model: int, heads: int, d_head: int, config: Mapping[str, Any] = {}, bert_state_dict=False):
+    def __init__(self, d_model: int, heads: int, d_head: int, config: Mapping[str, Any] = {}):
         super().__init__(config)
 
         self.dot_product = ScaledDotProductAttention(d_model, heads, d_head)
@@ -38,7 +38,7 @@ class MultiheadAttention(GrowingModule):
         self.d_head = d_head
         self.d_model = d_model
 
-        if bert_state_dict:
+        if self.get_config('bert_state_dict', default=False):
             self._register_state_dict_hook(self._bert_state_dict_hook)
             self._register_load_state_dict_pre_hook(self._load_bert_state_dict_pre_hook)
 
