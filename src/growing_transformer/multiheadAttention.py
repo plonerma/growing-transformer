@@ -103,7 +103,8 @@ class MultiheadAttention(GrowingModule):
         else:
             return out, attention
 
-    def grow(self, step_size: float = 1e-1) -> torch.Size:
+    def grow(self) -> torch.Size:
+        step_size = self.get_config('step_size', default=1e-2)
         num_novel = self.get_config('num_novel', default=0)
         eps_novel_weight = self.get_config('eps_novel_weight', 'eps_novel', default=1e-1)
         eps_novel_bias =self.get_config('eps_novel_bias', 'eps_novel', default=1e-1)

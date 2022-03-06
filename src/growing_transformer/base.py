@@ -46,6 +46,12 @@ class Growing(torch.nn.Module):
                 pass
         return default
 
+    def degrow(self, selected: torch.Tensor) -> None:
+        pass
+
+    def grow(self) -> torch.Size:
+        return torch.Size()
+
 
 class GrowingModule(Growing):
     def __init__(self, config: Mapping[str, Any] = {}):
@@ -65,7 +71,7 @@ class GrowingModule(Growing):
         pass
 
     @abstractmethod
-    def grow(self, step_size: float = 1e-1) -> torch.Size:
+    def grow(self) -> torch.Size:
         pass
 
     @abstractmethod

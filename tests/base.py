@@ -31,15 +31,6 @@ class GrowingTest:
     def new_model(config) -> Tuple[GrowingModule, float]:
         pass
 
-    def setup_model(self, config):
-        torch.manual_seed(0)
-
-        config = dict(config)
-        step_size = config.pop('step_size')
-        model = self.new_model(config)
-
-        return model, step_size
-
     def random_batch(self):
         return torch.rand(self.batches, self.length, self.embed_dim)
 
@@ -48,14 +39,15 @@ class GrowingTest:
         """ With these growth parameters, the function of the network should be
             changed.
         """
+        torch.manual_seed(0)
 
-        model, step_size = self.setup_model(config)
+        model = self.new_model(config)
 
         x = self.random_batch()
 
         y_a = model(x)
 
-        model.grow(step_size)
+        model.grow()
 
         y_b = model(x)
 
@@ -70,11 +62,13 @@ class GrowingTest:
             (after having called grow).
         """
 
-        model, step_size = self.setup_model(config)
+        torch.manual_seed(0)
+
+        model = self.new_model(config)
 
         x = self.random_batch()
 
-        size = model.grow(step_size)
+        size = model.grow()
 
         y_a = model(x)
 
@@ -92,12 +86,15 @@ class GrowingTest:
         """ The model should produce the same output before and after degrow
             (after having called grow).
         """
-        model, step_size = self.setup_model(config)
+        torch.manual_seed(0)
+
+        model = self.new_model(config)
+
         x = self.random_batch()
 
         y_a = model(x)
 
-        model.grow(step_size)
+        model.grow()
 
         # degrow deleting all recently grown neurons
         model.degrow(torch.arange(0))
@@ -122,19 +119,19 @@ class SplittingTest(GrowingTest):
                 changed only a litte bit.
             """
 
-            model, step_size = self.setup_model(config)
+            torch.manual_seed(0)
+
+            model = self.new_model(config)
 
             x = self.random_batch()
 
             y_a = model(x)
 
-            model.grow(step_size)
+            model.grow()
 
             y_b = model(x)
 
             diff = torch.abs(y_a - y_b)
-
-            print(config)
 
             # the change should be minor
             assert torch.all(diff < 1e-2)
