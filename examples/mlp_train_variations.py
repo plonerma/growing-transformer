@@ -1,4 +1,5 @@
 import logging
+from typing import Any, Dict
 
 import torch
 from sandbox import SimpleModel, SineToyDataset
@@ -31,7 +32,7 @@ grid = GridSearch(
 log.info(f"Searching grid with {len(grid)} elements.")
 
 for i, p in enumerate(grid):
-    hparams = dict(
+    hparams: Dict[str, Any] = dict(
         learning_rate=0.005,
         growth_phases=5,
         num_epochs=5,

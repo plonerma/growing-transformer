@@ -3,6 +3,9 @@ from contextlib import contextmanager
 from typing import Optional
 
 import torch
+
+# https://github.com/pytorch/pytorch/issues/39009
+from torch.optim.lr_scheduler import OneCycleLR  # type: ignore
 from torch.utils.data import DataLoader
 
 from .train_util import log_line
@@ -65,7 +68,7 @@ class Trainer:
                 y = self.model(train_x)
                 loss = self.criterion(y, train_y)
 
-                penalty = 0.0
+                penalty = torch.tensor(0.0)
                 for p in params:
                     penalty += (p**2).sum()
 
@@ -101,6 +104,7 @@ class Trainer:
     def train(
         self,
         train_data,
+        *,
         learning_rate: float = 0.01,
         use_onecycle: bool = True,
         num_epochs: int = 5,
@@ -127,8 +131,6 @@ class Trainer:
         log_line(log)
 
         try:
-
-            criterion = torch.nn.MSELoss()
             total_epochs = 0
 
             for growth_phase in range(growth_phases):
@@ -141,7 +143,7 @@ class Trainer:
                 if use_onecycle:
                     num_batches = len(train_data) // batch_size + 1
 
-                    scheduler = torch.optim.lr_scheduler.OneCycleLR(
+                    scheduler = OneCycleLR(
                         optimizer, steps_per_epoch=num_batches, epochs=num_epochs, max_lr=learning_rate
                     )
                 else:

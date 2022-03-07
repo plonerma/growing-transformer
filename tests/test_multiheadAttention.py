@@ -1,4 +1,3 @@
-import pytest
 import torch
 from transformers import BertConfig
 from transformers.models.bert.modeling_bert import BertAttention

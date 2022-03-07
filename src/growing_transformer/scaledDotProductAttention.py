@@ -1,4 +1,3 @@
-from contextlib import contextmanager
 from typing import Any, Iterable, Mapping, Optional
 
 import torch

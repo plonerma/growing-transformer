@@ -1,5 +1,3 @@
-import pytest
-
 from growing_transformer import MLP
 
 from .base import SplittingTest

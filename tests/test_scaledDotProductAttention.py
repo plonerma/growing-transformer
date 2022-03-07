@@ -1,7 +1,6 @@
 """ When growing with an extremly small step size, the model should maintain its
 function. """
 
-import pytest
 import torch
 
 from growing_transformer import ScaledDotProductAttention

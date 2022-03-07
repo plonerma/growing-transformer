@@ -1,7 +1,9 @@
 import logging
+from typing import Any, Dict
 
 import torch
 from sandbox import SimpleModel, SineToyDataset
+from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
 
 from growing_transformer import Trainer
@@ -28,7 +30,7 @@ grid = GridSearch(
 log.info(f"Searching grid with {len(grid)} elements.")
 
 for i, p in enumerate(grid):
-    hparams = dict(
+    hparams: Dict[str, Any] = dict(
         learning_rate=0.005,
         growth_phases=5,
         num_epochs=5,
@@ -47,9 +49,9 @@ for i, p in enumerate(grid):
     run_name = f"run_{i:04}"
     tensorboard_writer = SummaryWriter(f"runs/firefly/{run_name}")
 
-    batch_loader = DataLoader(train_data, batch_size=batch_size)
+    batch_loader = DataLoader(train_data, batch_size=32)
     for example_x, example_y in batch_loader:
-        tensorboard_writer.add_graph(self.model, example_x)
+        tensorboard_writer.add_graph(model, example_x)
         break
 
     def grow_func(trainer, model, growth_phase):

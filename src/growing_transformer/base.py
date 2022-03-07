@@ -1,5 +1,5 @@
 from abc import abstractmethod
-from typing import Any, Iterable, List, Mapping, Optional
+from typing import Any, Iterable, Mapping, Optional
 
 import torch
 

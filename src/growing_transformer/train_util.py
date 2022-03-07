@@ -1,4 +1,5 @@
 from itertools import product
+from typing import Any, Iterator, Mapping
 
 
 def log_line(log):
@@ -6,15 +7,15 @@ def log_line(log):
 
 
 class GridSearch:
-    def __init__(self, grid):
+    def __init__(self, grid: Mapping[str, Any]):
         self.grid = grid
 
-    def __iter__(self):
+    def __iter__(self) -> Iterator[Mapping[str, Any]]:
         keys, values = zip(*self.grid.items())
         return (dict(zip(keys, p)) for p in product(*values))
 
     def __len__(self):
-        l = 1
+        _len = 1
         for v in self.grid.values():
-            l *= len(v)
-        return l
+            _len *= len(v)
+        return _len

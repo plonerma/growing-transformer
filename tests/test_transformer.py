@@ -33,4 +33,4 @@ def test_transformer_function():
     y_a = growing_model(x)
     y_b = bert_model(x)
 
-    assert torch.all(torch.abs(y_a - y_b) < eps)
+    assert torch.all(torch.abs(y_a - y_b) < 1e-5)
