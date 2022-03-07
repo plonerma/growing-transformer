@@ -16,4 +16,8 @@ python3 -m virtualenv venv
 
 ### Run Tests
 
-`make tests`
+```
+mypy -p tests
+mypy -p growing_transformer
+pytest
+```
