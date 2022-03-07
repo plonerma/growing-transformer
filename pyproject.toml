@@ -1,0 +1,27 @@
+[tool.black]
+line-length = 120
+target-version = ['py36', 'py37']
+exclude = '''
+(
+  /(
+      \.eggs
+    | \.git
+    | \.pytest_cache
+    | build
+    | dist
+    | \.github
+    | \.ipynb_checkpoints
+    | venv
+  )/
+)
+'''
+[tool.pytest.ini_options]
+flake8-max-line-length = 210
+flake8-ignore = ["E203", "W503"]  # See https://github.com/PyCQA/pycodestyle/issues/373
+addopts = "-W error --flake8 --mypy --isort"
+
+[tool.mypy]
+ignore_missing_imports = true
+
+[tool.isort]
+profile = "black"

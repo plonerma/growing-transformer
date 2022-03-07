@@ -1,0 +1,23 @@
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: Set up Python 3.6
+        uses: actions/setup-python@v2
+        with:
+          python-version: 3.6
+      - name: Install package dependencies
+        run: pip install -e .
+      - name: Install dev dependencies
+        run: pip install -r requirements-dev.txt
+      - name: Show installed dependencies
+        run: pip freeze
+      - name: Run tests
+        run: pytest -vv
