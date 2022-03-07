@@ -123,8 +123,6 @@ class MLP(GrowingModule):
         return self.new_neurons.size()
 
     def degrow(self, selected: torch.Tensor) -> None:
-        print(selected)
-
         with torch.no_grad():
             assert self.new_neurons is not None
 

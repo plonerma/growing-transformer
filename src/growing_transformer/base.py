@@ -52,6 +52,9 @@ class Growing(torch.nn.Module):
     def grow(self) -> torch.Size:
         return torch.Size()
 
+    def select(self, k: int) -> torch.Tensor:
+        return torch.Tensor()
+
 
 class GrowingModule(Growing):
     def __init__(self, config: Mapping[str, Any] = {}):
@@ -82,4 +85,4 @@ class GrowingModule(Growing):
         assert self.new_neurons is not None
 
         # return indices of neurons with largest absolute gradient
-        return torch.topk(torch.abs(self.new_neurons.grad), k).indices
+        return torch.topk(self.new_neurons * self.new_neurons.grad, k).indices
