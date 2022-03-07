@@ -1,10 +1,9 @@
 import pytest
 import torch
-
-from growing_transformer import MultiheadAttention
-
 from transformers import BertConfig
 from transformers.models.bert.modeling_bert import BertAttention
+
+from growing_transformer import MultiheadAttention
 
 from .base import GrowingTest
 
@@ -18,9 +17,8 @@ class TestMultiheadAttention(GrowingTest):
     d_head = 16
 
     def new_model(self, config):
-        config = {**config, 'bert_state_dict': True}
+        config = {**config, "bert_state_dict": True}
         return MultiheadAttention(self.embed_dim, self.num_heads, self.d_head, config=config)
-
 
     def test_function(self):
         # initialize growing multihead attention block
@@ -40,7 +38,7 @@ class TestMultiheadAttention(GrowingTest):
 
         bert_attention = BertAttention(configuration)
 
-        assert (bert_attention.state_dict().keys() == state.keys())
+        assert bert_attention.state_dict().keys() == state.keys()
 
         # load state for growing model into torch model
         bert_attention.load_state_dict(state)
@@ -49,9 +47,8 @@ class TestMultiheadAttention(GrowingTest):
         bert_attention.eval()
         growing_model.eval()
 
-
         x = self.random_batch()
-        #x = torch.rand(batches, length, embed_dim)
+        # x = torch.rand(batches, length, embed_dim)
 
         y_a, attn_a = growing_model(x, return_attention=True)
         y_b, attn_b = bert_attention(x, output_attentions=True)

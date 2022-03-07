@@ -1,13 +1,12 @@
-from .base import Growing, GrowingModule
-from .mlp import MLP
-from .scaledDotProductAttention import ScaledDotProductAttention
-from .transformer import GrowingTransformer
-from .multiheadAttention import MultiheadAttention
-from .trainer import Trainer
-
 import logging
 import logging.config
 
+from .base import Growing, GrowingModule
+from .mlp import MLP
+from .multiheadAttention import MultiheadAttention
+from .scaledDotProductAttention import ScaledDotProductAttention
+from .trainer import Trainer
+from .transformer import GrowingTransformer
 
 logging.config.dictConfig(
     {

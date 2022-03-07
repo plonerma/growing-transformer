@@ -1,15 +1,13 @@
+import logging
+
 import torch
+from sandbox import SimpleModel, SineToyDataset
 from torch.utils.tensorboard import SummaryWriter
 
 from growing_transformer import Trainer
 from growing_transformer.train_util import GridSearch, log_line
 
-from sandbox import SimpleModel, SineToyDataset
-
-import logging
-
-
-log = logging.getLogger('growing_transformer')
+log = logging.getLogger("growing_transformer")
 
 
 train_data = SineToyDataset(8000)
@@ -17,16 +15,18 @@ grow_data = SineToyDataset(2000)
 
 criterion = torch.nn.MSELoss()
 
-grid = GridSearch(dict(
-    seed=range(1),
-    learning_rate=[0.01, 0.005, 0.001],
-    use_onecycle=[True, False],
-    tune_direction=[True, False],
-    tune_new_neurons=[True, False],
-    neuron_selection=['random', 'firefly'],
-    num_novel=[0, 4],
-    split=[False, True],
-))
+grid = GridSearch(
+    dict(
+        seed=range(1),
+        learning_rate=[0.01, 0.005, 0.001],
+        use_onecycle=[True, False],
+        tune_direction=[True, False],
+        tune_new_neurons=[True, False],
+        neuron_selection=["random", "firefly"],
+        num_novel=[0, 4],
+        split=[False, True],
+    )
+)
 
 log.info(f"Searching grid with {len(grid)} elements.")
 
@@ -41,19 +41,17 @@ for i, p in enumerate(grid):
 
     hparams.update(p)
 
-
-
-    if (hparams['num_novel'] == 0) and not hparams['split']:
+    if (hparams["num_novel"] == 0) and not hparams["split"]:
         continue
 
     log_line(log)
     log.info("Hyperparameters")
-    for k,v in hparams.items():
-        log.info(f' - {k}: {str(v)}')
+    for k, v in hparams.items():
+        log.info(f" - {k}: {str(v)}")
 
     log_line(log)
 
-    torch.manual_seed(hparams['seed'])
+    torch.manual_seed(hparams["seed"])
 
     model = SimpleModel(1, 1, 8, 2, 2, config=hparams)
 
@@ -66,22 +64,22 @@ for i, p in enumerate(grid):
         for m in model.growing_modules():
             sizes.append(m.grow())
 
-        if hparams['tune_direction']:
+        if hparams["tune_direction"]:
             trainer.tune_direction(grow_data)
 
-        if hparams['tune_new_neurons']:
+        if hparams["tune_new_neurons"]:
             trainer.tune_new_neurons(grow_data)
 
-        if hparams['neuron_selection'] == 'firefly':
+        if hparams["neuron_selection"] == "firefly":
             trainer.calculate_new_gradient(grow_data)
 
             for m in model.growing_modules():
-                selected = m.select(hparams['num_kept_neurons'])
+                selected = m.select(hparams["num_kept_neurons"])
                 m.degrow(selected)
                 if selected.numel():
-                    tensorboard_writer.add_histogram(f'selected neurons/{m.__class__.__name__}', selected, growth_phase)
+                    tensorboard_writer.add_histogram(f"selected neurons/{m.__class__.__name__}", selected, growth_phase)
         else:
-            assert hparams['neuron_selection'] == 'random'
+            assert hparams["neuron_selection"] == "random"
 
             for s, m in zip(sizes, model.growing_modules()):
 
@@ -89,28 +87,21 @@ for i, p in enumerate(grid):
                     continue
                 *shape, n_neurons = s
 
-                selected = torch.stack([
-                    torch.randperm(n_neurons)[:hparams['num_kept_neurons']]
-                    for _ in range(s.numel() // n_neurons)
-                ])
+                selected = torch.stack(
+                    [torch.randperm(n_neurons)[: hparams["num_kept_neurons"]] for _ in range(s.numel() // n_neurons)]
+                )
 
                 selected = selected.reshape(*shape, -1)
 
                 m.degrow(selected)
                 if selected.numel():
-                    tensorboard_writer.add_histogram(f'selected neurons/{m.__class__.__name__}', selected, growth_phase)
+                    tensorboard_writer.add_histogram(f"selected neurons/{m.__class__.__name__}", selected, growth_phase)
 
-    trainer = Trainer(
-        model, criterion, grow_func)
+    trainer = Trainer(model, criterion, grow_func)
 
     try:
-        metrics = trainer.train(
-            train_data,
-            propagate_interrupt=True,
-            tensorboard_writer=tensorboard_writer,
-            **hparams
-        )
-        tensorboard_writer.add_hparams(hparams, metrics, run_name='.')
+        metrics = trainer.train(train_data, propagate_interrupt=True, tensorboard_writer=tensorboard_writer, **hparams)
+        tensorboard_writer.add_hparams(hparams, metrics, run_name=".")
     except KeyboardInterrupt:
         log_line(log)
         log.warning("Quitting grid search.")

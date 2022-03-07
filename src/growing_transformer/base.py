@@ -1,7 +1,7 @@
-import torch
-
-from typing import List, Mapping, Any, Iterable, Optional
 from abc import abstractmethod
+from typing import Any, Iterable, List, Mapping, Optional
+
+import torch
 
 
 class Growing(torch.nn.Module):
@@ -36,7 +36,7 @@ class Growing(torch.nn.Module):
             p = m.new_neurons
 
             if p is not None:
-                    yield p
+                yield p
 
     def get_config(self, *args: str, default: Any = None):
         for arg in args:

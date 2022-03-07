@@ -1,8 +1,8 @@
 import pytest
 import torch
+from transformers import BertConfig, BertModel
 
 from growing_transformer import GrowingTransformer
-from transformers import BertConfig, BertModel
 
 
 @pytest.mark.skip(reason="not implemented yet")

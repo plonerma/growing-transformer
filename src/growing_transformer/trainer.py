@@ -1,16 +1,13 @@
+import logging
+from contextlib import contextmanager
+from typing import Optional
+
 import torch
 from torch.utils.data import DataLoader
 
-from typing import Optional
-from contextlib import contextmanager
-
 from .train_util import log_line
 
-import logging
-
-log = logging.getLogger('growing_transformer')
-
-
+log = logging.getLogger("growing_transformer")
 
 
 class Trainer:
@@ -47,10 +44,10 @@ class Trainer:
         optim_kw={},
         batch_size: int = 32,
         shuffle: bool = True,
-        num_workers: Optional[int] = None
+        num_workers: Optional[int] = None,
     ):
         if not isinstance(optimizer, torch.optim.Optimizer):
-            optim_kw = {'lr': 1e-3, 'momentum': 0.1, 'alpha': 0.9, **optim_kw}
+            optim_kw = {"lr": 1e-3, "momentum": 0.1, "alpha": 0.9, **optim_kw}
 
             optimizer = optimizer(params, **optim_kw)
 
@@ -70,12 +67,11 @@ class Trainer:
 
                 penalty = 0.0
                 for p in params:
-                    penalty += (p ** 2).sum()
+                    penalty += (p**2).sum()
 
                 loss.backward()
                 penalty.backward()
                 optimizer.step()
-
 
     def tune_direction(self, *args, **kwargs):
         self.tune_with_penalty(list(self.model.direction_params()), *args, **kwargs)
@@ -84,10 +80,7 @@ class Trainer:
         self.tune_with_penalty(list(self.model.new_params()), *args, **kwargs)
 
     def calculate_new_gradient(
-        self, train_data,
-        batch_size: int = 32,
-        shuffle: bool = True,
-        num_workers: Optional[int] = None
+        self, train_data, batch_size: int = 32, shuffle: bool = True, num_workers: Optional[int] = None
     ):
 
         batch_loader = DataLoader(
@@ -117,22 +110,19 @@ class Trainer:
         num_workers: Optional[int] = None,
         propagate_interrupt=False,
         tensorboard_writer=None,
-        **kw
+        **kw,
     ):
 
-        log.info(f'Model: {self.model}')
+        log.info(f"Model: {self.model}")
         log_line(log)
         log.info("Parameters:")
-        log.info(f' - learning_rate: {learning_rate}')
-        log.info(f' - use_onecycle: {use_onecycle}')
-        log.info(f' - epochs per growth phase: {num_epochs}')
-        log.info(f' - growth phases: {growth_phases}')
+        log.info(f" - learning_rate: {learning_rate}")
+        log.info(f" - use_onecycle: {use_onecycle}")
+        log.info(f" - epochs per growth phase: {num_epochs}")
+        log.info(f" - growth phases: {growth_phases}")
         log_line(log)
 
         use_tensorboard = tensorboard_writer is not None
-
-
-        
 
         log_line(log)
 
@@ -148,15 +138,11 @@ class Trainer:
 
                 optimizer = torch.optim.Adam(self.model.parameters(), lr=learning_rate)
 
-
                 if use_onecycle:
                     num_batches = len(train_data) // batch_size + 1
 
                     scheduler = torch.optim.lr_scheduler.OneCycleLR(
-                        optimizer,
-                        steps_per_epoch=num_batches,
-                        epochs=num_epochs,
-                        max_lr=learning_rate
+                        optimizer, steps_per_epoch=num_batches, epochs=num_epochs, max_lr=learning_rate
                     )
                 else:
                     scheduler = None
@@ -191,21 +177,22 @@ class Trainer:
                     if use_tensorboard:
                         lr = 0.0
                         for group in optimizer.param_groups:
-                            lr = group['lr']
+                            lr = group["lr"]
 
                         tensorboard_writer.add_scalar("training/learning rate", lr, total_epochs)
                         tensorboard_writer.add_scalar("training/train loss", loss, total_epochs)
-                        tensorboard_writer.add_scalar("training/model size", sum(p.numel() for p in self.model.parameters()), total_epochs)
+                        tensorboard_writer.add_scalar(
+                            "training/model size", sum(p.numel() for p in self.model.parameters()), total_epochs
+                        )
 
                     total_epochs += 1
                 log.info(f"growth phase {growth_phase+1} - {total_epochs} epochs - loss: {loss}")
 
             if use_tensorboard:
-                log.info(f' - learning_rate: {learning_rate}')
-                log.info(f' - use_onecycle: {use_onecycle}')
-                log.info(f' - epochs per growth phase: {num_epochs}')
-                log.info(f' - growth phases: {growth_phases}')
-
+                log.info(f" - learning_rate: {learning_rate}")
+                log.info(f" - use_onecycle: {use_onecycle}")
+                log.info(f" - epochs per growth phase: {num_epochs}")
+                log.info(f" - growth phases: {growth_phases}")
 
         except KeyboardInterrupt:
             log_line(log)
