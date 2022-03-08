@@ -2,12 +2,9 @@ import logging
 import logging.config
 
 from .base import Growing, GrowingModule
-from .mlp import MLP
-from .multiheadAttention import MultiheadAttention
-from .scaledDotProductAttention import ScaledDotProductAttention
 from .trainer import Trainer
 from .transformer import GrowingTransformer
-from .transformerLayer import TransformerLayer
+from .transformerEncoder import TransformerEncoder
 
 logging.config.dictConfig(
     {
@@ -32,10 +29,7 @@ logger = logging.getLogger("growing_transformer")
 __all__ = [
     "Growing",
     "GrowingModule",
-    "MLP",
-    "MultiheadAttention",
-    "ScaledDotProductAttention",
     "Trainer",
     "GrowingTransformer",
-    "TransformerLayer",
+    "TransformerEncoder",
 ]

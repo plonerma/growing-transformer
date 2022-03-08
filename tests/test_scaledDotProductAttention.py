@@ -3,7 +3,7 @@ function. """
 
 import torch
 
-from growing_transformer import ScaledDotProductAttention
+from growing_transformer.scaledDotProductAttention import ScaledDotProductAttention
 
 from .base import GrowingTest
 

@@ -4,7 +4,7 @@ import torch
 from transformers import BertConfig
 from transformers.models.bert.modeling_bert import BertAttention
 
-from growing_transformer import MultiheadAttention
+from growing_transformer.multiheadAttention import MultiheadAttention
 
 from .base import GrowingTest
 
