@@ -1,3 +1,4 @@
+import logging
 from abc import abstractmethod
 from typing import List, Tuple
 
@@ -6,6 +7,8 @@ import torch
 
 from growing_transformer import Growing, GrowingModule
 
+log = logging.getLogger("growing_transformer.tests")
+
 
 class GrowingTest:
     embed_dim = 64
@@ -13,8 +16,8 @@ class GrowingTest:
     length = 512
 
     growth_params = [
-        dict(num_novel=4, eps_novel=1, step_size=1e-5),
-        dict(num_novel=4, eps_novel=1e-5, step_size=1),
+        dict(split=False, num_novel=4, eps_novel=1, step_size=1e-5),
+        dict(split=False, num_novel=4, eps_novel=1e-5, step_size=1),
     ]
 
     degrowth_params = [
@@ -48,6 +51,8 @@ class GrowingTest:
 
         diff = torch.abs(y_a - y_b)
 
+        log.info(f"Max difference {diff.max()}")
+
         assert torch.all(diff < 1e-10)
 
     @pytest.mark.parametrize("config", growth_params)
@@ -76,8 +81,10 @@ class GrowingTest:
 
         diff = torch.abs(y_a - y_b)
 
+        log.info(f"Max difference {diff.max()}")
+
         # the change should be minor
-        assert torch.all(diff < 1e-2)
+        assert torch.all(diff < 1e-3)
 
     @pytest.mark.parametrize("config", growth_params)
     def test_growth_exists(self, config):
@@ -105,6 +112,8 @@ class GrowingTest:
         y_b = model(x)
 
         diff = torch.abs(y_a - y_b)
+
+        log.info(f"Max difference {diff.max()}")
 
         # but should be there
         assert torch.any(diff > 1e-12)
@@ -141,6 +150,8 @@ class GrowingTest:
 
         diff = torch.abs(y_a - y_b)
 
+        log.info(f"Max difference {diff.max()}")
+
         assert torch.all(diff < 1e-5)
 
     @pytest.mark.parametrize("config", degrowth_params)
@@ -173,6 +184,8 @@ class GrowingTest:
         y_b = model(x)
 
         diff = torch.abs(y_a - y_b)
+
+        log.info(f"Max difference {diff.max()}")
 
         assert torch.all(diff < 1e-5)
 
@@ -210,6 +223,8 @@ class SplittingTest(GrowingTest):
         y_b = model(x)
 
         diff = torch.abs(y_a - y_b)
+
+        log.info(f"Max difference {diff.max()}")
 
         # the change should be minor
         assert torch.all(diff < 1e-2)

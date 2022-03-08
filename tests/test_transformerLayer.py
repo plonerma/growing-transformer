@@ -33,7 +33,7 @@ class TestTransformerLayer(GrowingTest):
             hidden_size=self.embed_dim,
             num_attention_heads=self.num_heads,
             intermediate_size=self.hidden_size,
-            hidden_act="gelu"
+            hidden_act="gelu",
         )
 
         # get state from growing model
@@ -61,7 +61,7 @@ class TestTransformerLayer(GrowingTest):
         x = self.random_batch()
 
         y_a = growing_model(x)
-        y_b, = bert_layer(x)
+        (y_b,) = bert_layer(x)
 
         print(y_b)
 
