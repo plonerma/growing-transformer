@@ -4,7 +4,6 @@ import logging.config
 from .base import Growing, GrowingModule
 from .trainer import Trainer
 from .transformer import GrowingTransformer
-from .transformerEncoder import TransformerEncoder
 
 logging.config.dictConfig(
     {
@@ -31,5 +30,4 @@ __all__ = [
     "GrowingModule",
     "Trainer",
     "GrowingTransformer",
-    "TransformerEncoder",
 ]

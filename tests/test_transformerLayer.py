@@ -4,7 +4,7 @@ import torch
 from transformers import BertConfig
 from transformers.models.bert.modeling_bert import BertLayer
 
-from growing_transformer.transformerLayer import TransformerLayer
+from growing_transformer.layer import GrowingLayer
 
 from .base import GrowingTest
 
@@ -22,7 +22,7 @@ class TestTransformerLayer(GrowingTest):
 
     def new_model(self, config):
         config = {**config, "bert_state_dict": True, "intermediate_act_fn": "gelu"}
-        return TransformerLayer(self.embed_dim, self.num_heads, self.d_head, self.hidden_size, config=config)
+        return GrowingLayer(self.embed_dim, self.num_heads, self.d_head, self.hidden_size, config=config)
 
     def test_function(self):
         # initialize growing multihead attention block

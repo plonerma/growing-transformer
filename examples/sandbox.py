@@ -2,7 +2,7 @@ import torch
 from torch.utils.data import Dataset
 
 from growing_transformer import Growing
-from growing_transformer.mlp import MLP
+from growing_transformer.mlp import GrowingMLP as MLP
 
 
 class SimpleModel(Growing):

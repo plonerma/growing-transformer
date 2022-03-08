@@ -3,15 +3,15 @@ from typing import Any, Mapping
 import torch
 
 from .base import Growing
-from .transformerLayer import TransformerLayer
+from .layer import GrowingLayer
 
 
-class TransformerEncoder(Growing):
+class GrowingEncoder(Growing):
     def __init__(self, embed_dim, num_heads, d_head, hidden_size, *, config: Mapping[str, Any]):
         super().__init__(config=config)
         self.layer = torch.nn.ModuleList(
             [
-                TransformerLayer(embed_dim, num_heads, d_head, hidden_size, config=config)
+                GrowingLayer(embed_dim, num_heads, d_head, hidden_size, config=config)
                 for _ in range(self.get_config("num_hidden_layers", default=6))
             ]
         )

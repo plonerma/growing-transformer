@@ -3,7 +3,9 @@ function. """
 
 import torch
 
-from growing_transformer.scaledDotProductAttention import ScaledDotProductAttention
+from growing_transformer.scaledDotProductAttention import (
+    GrowingScaledDotProductAttention,
+)
 
 from .base import GrowingTest
 
@@ -13,7 +15,9 @@ class TestScaledDotProductAttention(GrowingTest):
     d_head = 16
 
     def new_model(self, config):
-        return ScaledDotProductAttention(self.embed_dim, self.num_heads, self.d_head, batch_first=False, config=config)
+        return GrowingScaledDotProductAttention(
+            self.embed_dim, self.num_heads, self.d_head, batch_first=False, config=config
+        )
 
     def test_function(self):
         model = self.new_model({})

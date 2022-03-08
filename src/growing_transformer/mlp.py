@@ -7,7 +7,7 @@ from torch.nn.init import uniform_
 from . import GrowingModule
 
 
-class MLP(GrowingModule):
+class GrowingMLP(GrowingModule):
     def __init__(
         self,
         in_features: int,

@@ -4,7 +4,7 @@ import torch
 from transformers import BertConfig
 from transformers.models.bert.modeling_bert import BertAttention
 
-from growing_transformer.multiheadAttention import MultiheadAttention
+from growing_transformer.multiheadAttention import GrowingMultiheadAttention
 
 from .base import GrowingTest
 
@@ -21,7 +21,7 @@ class TestMultiheadAttention(GrowingTest):
 
     def new_model(self, config):
         config = {**config, "bert_state_dict": True}
-        return MultiheadAttention(self.embed_dim, self.num_heads, self.d_head, config=config)
+        return GrowingMultiheadAttention(self.embed_dim, self.num_heads, self.d_head, config=config)
 
     def test_function(self):
         # initialize growing multihead attention block

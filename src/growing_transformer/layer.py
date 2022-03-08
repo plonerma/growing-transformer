@@ -4,8 +4,8 @@ import torch
 from transformers.activations import ACT2FN
 
 from .base import Growing
-from .mlp import MLP
-from .multiheadAttention import MultiheadAttention
+from .mlp import GrowingMLP as MLP
+from .multiheadAttention import GrowingMultiheadAttention as MultiheadAttention
 
 _bert_state_dict_map = {
     "intermediate.dense": "mlp.linear_in",
@@ -14,7 +14,7 @@ _bert_state_dict_map = {
 }
 
 
-class TransformerLayer(Growing):
+class GrowingLayer(Growing):
     def __init__(self, d_model: int, heads: int, d_head: int, hidden_size: int, *, config: Mapping[str, Any]):
         super().__init__(config)
 

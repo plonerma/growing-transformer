@@ -5,7 +5,7 @@ import torch
 from .base import GrowingModule
 
 
-class ScaledDotProductAttention(GrowingModule):
+class GrowingScaledDotProductAttention(GrowingModule):
     def __init__(self, d_model: int, heads: int, d_head: int, *, config: Mapping[str, Any], batch_first: bool = True):
         super().__init__(config)
 

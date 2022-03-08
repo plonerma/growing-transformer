@@ -6,7 +6,9 @@ from torch.nn import LayerNorm, Linear, Parameter
 from torch.nn.init import uniform_
 
 from .base import GrowingModule
-from .scaledDotProductAttention import ScaledDotProductAttention
+from .scaledDotProductAttention import (
+    GrowingScaledDotProductAttention as ScaledDotProductAttention,
+)
 
 _bert_state_dict_map = {
     "self.query.weight": "dot_product.query_linear.weight",
@@ -22,7 +24,7 @@ _bert_state_dict_map = {
 }
 
 
-class MultiheadAttention(GrowingModule):
+class GrowingMultiheadAttention(GrowingModule):
     def __init__(self, d_model: int, heads: int, d_head: int, *, config: Mapping[str, Any]):
         super().__init__(config)
 

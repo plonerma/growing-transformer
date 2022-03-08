@@ -4,7 +4,7 @@ import torch
 from transformers import BertConfig
 from transformers.models.bert.modeling_bert import BertEncoder
 
-from growing_transformer import TransformerEncoder
+from growing_transformer.encoder import GrowingEncoder
 
 from .base import GrowingTest
 
@@ -22,7 +22,7 @@ class TestTransformerEncoder(GrowingTest):
 
     def new_model(self, config):
         config = {**config, "bert_state_dict": True, "intermediate_act_fn": "gelu"}
-        return TransformerEncoder(self.embed_dim, self.num_heads, self.d_head, self.hidden_size, config=config)
+        return GrowingEncoder(self.embed_dim, self.num_heads, self.d_head, self.hidden_size, config=config)
 
     def test_function(self):
         # initialize growing multihead attention block
