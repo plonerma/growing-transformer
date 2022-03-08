@@ -7,6 +7,7 @@ from .multiheadAttention import MultiheadAttention
 from .scaledDotProductAttention import ScaledDotProductAttention
 from .trainer import Trainer
 from .transformer import GrowingTransformer
+from .transformerLayer import TransformerLayer
 
 logging.config.dictConfig(
     {
@@ -36,4 +37,5 @@ __all__ = [
     "ScaledDotProductAttention",
     "Trainer",
     "GrowingTransformer",
+    "TransformerLayer",
 ]
