@@ -23,10 +23,10 @@ _bert_state_dict_map = {
 
 
 class MultiheadAttention(GrowingModule):
-    def __init__(self, d_model: int, heads: int, d_head: int, config: Mapping[str, Any] = {}):
+    def __init__(self, d_model: int, heads: int, d_head: int, *, config: Mapping[str, Any]):
         super().__init__(config)
 
-        self.dot_product = ScaledDotProductAttention(d_model, heads, d_head)
+        self.dot_product = ScaledDotProductAttention(d_model, heads, d_head, config=config)
 
         self.value_linear = Linear(d_model, heads * d_head)
         self.output_linear = Linear(heads * d_head, d_model)

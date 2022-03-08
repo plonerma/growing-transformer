@@ -1,3 +1,5 @@
+import logging
+
 import torch
 from transformers import BertConfig
 from transformers.models.bert.modeling_bert import BertAttention
@@ -5,6 +7,8 @@ from transformers.models.bert.modeling_bert import BertAttention
 from growing_transformer import MultiheadAttention
 
 from .base import GrowingTest
+
+log = logging.getLogger("growing_transformer.tests")
 
 
 class TestMultiheadAttention(GrowingTest):
@@ -23,17 +27,15 @@ class TestMultiheadAttention(GrowingTest):
         # initialize growing multihead attention block
         growing_model = self.new_model({})
 
-        # get state from that model
-        state = growing_model.state_dict()
-
-        for k, v in state.items():
-            print(k, v.size())
-
         # bert multihead attention block
-
         configuration = BertConfig(hidden_size=self.embed_dim, num_attention_heads=self.num_heads)
 
-        print(configuration)
+        # get state from growing model
+        state = growing_model.state_dict()
+
+        log.info("State:")
+        for k, v in state.items():
+            log.info(f"{k}: {v.size()}")
 
         bert_attention = BertAttention(configuration)
 

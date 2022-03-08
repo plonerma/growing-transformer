@@ -5,7 +5,7 @@ import torch
 
 
 class Growing(torch.nn.Module):
-    def __init__(self, config: Mapping[str, Any] = {}):
+    def __init__(self, config: Mapping[str, Any]):
         super().__init__()
         self.config = config
 

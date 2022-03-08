@@ -6,7 +6,7 @@ from .base import GrowingModule
 
 
 class ScaledDotProductAttention(GrowingModule):
-    def __init__(self, d_model: int, heads: int, d_head: int, batch_first: bool = True, config: Mapping[str, Any] = {}):
+    def __init__(self, d_model: int, heads: int, d_head: int, *, config: Mapping[str, Any], batch_first: bool = True):
         super().__init__(config)
 
         self.query_linear = torch.nn.Linear(d_model, heads * d_head)

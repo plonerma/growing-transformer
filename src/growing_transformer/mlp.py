@@ -13,14 +13,19 @@ class MLP(GrowingModule):
         in_features: int,
         out_features: int,
         hidden_features: int,
+        *,
+        config: Mapping[str, Any],
         activation=torch.nn.Tanh(),
-        config: Mapping[str, Any] = {},
     ):
-        super().__init__(config)
+        super().__init__(config=config)
 
         self.linear_in = torch.nn.Linear(in_features, hidden_features)
         self.activation = activation
         self.linear_out = torch.nn.Linear(hidden_features, out_features)
+
+        dropout = self.get_config("hidden_dropout", "dropout", default=0.1)
+        self.dropout = torch.nn.Dropout(dropout)
+
         self.reset_grow_state()
 
     def reset_grow_state(self) -> None:
@@ -91,6 +96,8 @@ class MLP(GrowingModule):
                 y_novel = self.activation(h_novel) * self.new_neurons[-num_novel:]
                 y_novel = torch.nn.functional.linear(y_novel, self._out_weight_novel)
                 y = y + y_novel
+
+        y = self.dropout(y)
 
         return y
 
