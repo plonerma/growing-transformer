@@ -3,21 +3,11 @@
 
 ## Getting Started
 
-### Create & Activate Virtual Environment
+- Clone repository
+- Install package: `pip install -e .`
+- Run example:  `python examples/mlp_train_firefly.py`
 
-```
-python3 -m virtualenv venv
-. venv/bin/activate
-```
+For development purposes:
 
-### Install Package
-
-`pip install -e .`
-
-### Run Tests
-
-```
-mypy -p tests
-mypy -p growing_transformer
-pytest
-```
+- Install dev dependencies: `pip install -r requirements-dev.txt`
+- Run tests: `pytest`
