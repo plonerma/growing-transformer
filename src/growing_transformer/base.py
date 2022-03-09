@@ -1,13 +1,21 @@
 from abc import abstractmethod
-from typing import Any, Iterable, Mapping, Optional
+from typing import Iterable, Mapping, Optional
 
 import torch
 
+from .configuration import GrowingConfig
+
 
 class Growing(torch.nn.Module):
-    def __init__(self, config: Mapping[str, Any]):
+    _bert_state_dict_map: Optional[Mapping[str, str]] = None
+
+    def __init__(self, config: GrowingConfig):
         super().__init__()
         self.config = config
+
+        if config.bert_like_state_dict and self._bert_state_dict_map is not None:
+            self._register_state_dict_hook(self._bert_state_dict_hook)
+            self._register_load_state_dict_pre_hook(self._load_bert_state_dict_pre_hook)
 
     def growing_children(self):
         for child in self.children():
@@ -38,14 +46,6 @@ class Growing(torch.nn.Module):
             if p is not None:
                 yield p
 
-    def get_config(self, *args: str, default: Any = None):
-        for arg in args:
-            try:
-                return self.config[arg]
-            except KeyError:
-                pass
-        return default
-
     def degrow(self, selected: torch.Tensor) -> None:
         pass
 
@@ -55,9 +55,25 @@ class Growing(torch.nn.Module):
     def select(self, k: int) -> torch.Tensor:
         return torch.Tensor()
 
+    def _switch_key_prefix(self, state_dict, old_prefix, new_prefix):
+        for k in list(state_dict.keys()):
+            if k.startswith(old_prefix):
+                k_new = new_prefix + k[len(old_prefix) :]
+                state_dict[k_new] = state_dict[k]
+                del state_dict[k]
+
+    @staticmethod
+    def _bert_state_dict_hook(self, state_dict, prefix, local_metadata):
+        for k_new_prefix, k_prefix in self._bert_state_dict_map.items():
+            self._switch_key_prefix(state_dict, old_prefix=prefix + k_prefix, new_prefix=prefix + k_new_prefix)
+
+    def _load_bert_state_dict_pre_hook(self, state_dict, prefix, *_):
+        for k_prefix, k_new_prefix in self._bert_state_dict_map.items():
+            self._switch_key_prefix(state_dict, old_prefix=prefix + k_prefix, new_prefix=prefix + k_new_prefix)
+
 
 class GrowingModule(Growing):
-    def __init__(self, config: Mapping[str, Any] = {}):
+    def __init__(self, config: GrowingConfig):
         super().__init__(config)
         self.new_neurons: Optional[torch.nn.Parameter] = None
 

@@ -1,30 +1,39 @@
-from typing import Any, List, Mapping, Optional
+from typing import Callable, List, Optional
 
 import torch
 from torch.nn import Parameter
 from torch.nn.init import uniform_
+from transformers.activations import ACT2FN
 
 from . import GrowingModule
+from .configuration import GrowingConfig
 
 
 class GrowingMLP(GrowingModule):
     def __init__(
         self,
-        in_features: int,
-        out_features: int,
-        hidden_features: int,
+        config: GrowingConfig,
         *,
-        config: Mapping[str, Any],
-        activation=torch.nn.Tanh(),
+        in_features: Optional[int] = None,
+        hidden_features: Optional[int] = None,
+        out_features: Optional[int] = None,
     ):
         super().__init__(config=config)
 
+        in_features = in_features or config.d_model
+        hidden_features = hidden_features or config.intermediate_size
+        out_features = out_features or config.d_model
+
         self.linear_in = torch.nn.Linear(in_features, hidden_features)
-        self.activation = activation
         self.linear_out = torch.nn.Linear(hidden_features, out_features)
 
-        dropout = self.get_config("hidden_dropout", "dropout", default=0.1)
-        self.dropout = torch.nn.Dropout(dropout)
+        self.dropout = torch.nn.Dropout(self.config.hidden_dropout_prob)
+
+        self.activation: Callable
+        if isinstance(self.config.hidden_act, str):
+            self.activation = ACT2FN[self.config.hidden_act]
+        else:
+            self.activation = self.config.hidden_act
 
         self.reset_grow_state()
 
@@ -102,13 +111,13 @@ class GrowingMLP(GrowingModule):
         return y
 
     def grow(self) -> torch.Size:
-        step_size = self.get_config("step_size", default=1e-2)
-        split = self.get_config("split", default=True)
-        num_novel = self.get_config("num_novel", default=0)
-        eps_split_weight = self.get_config("eps_split_weight", "eps_split", default=1e-1)
-        eps_split_bias = self.get_config("eps_split_bias", "eps_split", default=1e-1)
-        eps_novel_weight = self.get_config("eps_novel_weight", "eps_novel", default=1e-1)
-        eps_novel_bias = self.get_config("eps_novel_bias", "eps_novel", default=1e-1)
+        step_size = self.config.step_size
+        split = self.config.mlp_split
+        num_novel = self.config.mlp_num_novel
+        eps_split_weight = self.config.eps_split_weight
+        eps_split_bias = self.config.eps_split_bias
+        eps_novel_weight = self.config.eps_novel_weight
+        eps_novel_bias = self.config.eps_novel_bias
 
         # add parameter to measure influence/gradient of adding new neurons
         self.new_neurons = Parameter(

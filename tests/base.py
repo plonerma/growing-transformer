@@ -1,19 +1,28 @@
 import logging
-from abc import abstractmethod
-from typing import List, Tuple
+from typing import List, Optional, Type
 
 import pytest
 import torch
 
-from growing_transformer import Growing, GrowingModule
+from growing_transformer import Growing, GrowingConfig, GrowingModule
 
 log = logging.getLogger("growing_transformer.tests")
 
 
 class GrowingTest:
-    embed_dim = 64
-    batches = 16
-    length = 512
+    num_batches = 16
+    length = 32
+
+    base_config = dict(
+        hidden_act="gelu",
+        d_model=64,
+        num_heads=4,
+        d_head=16,
+        intermediate_size=128,
+        bert_like_state_dict=True,
+    )
+
+    model_class: Optional[Type[Growing]] = None
 
     growth_params = [
         dict(split=False, num_novel=4, eps_novel=1, step_size=1e-5),
@@ -28,16 +37,16 @@ class GrowingTest:
         dict(split=True, num_novel=4, eps_split=0.1, eps_novel=0.2, step_size=1.0),
     ]
 
-    @abstractmethod
-    def new_model(config) -> Tuple[GrowingModule, float]:
-        pass
+    def random_batch(self, config):
+        return torch.rand(self.num_batches, self.length, config.d_model)
 
-    def random_batch(self):
-        return torch.rand(self.batches, self.length, self.embed_dim)
+    def new_config(self, params={}):
+        return GrowingConfig(**params, **self.base_config)
 
     def test_state_loading(self):
-        model_a = self.new_model({})
-        model_b = self.new_model({})
+        config = self.new_config({})
+        model_a = self.model_class(config)
+        model_b = self.model_class(config)
 
         state = model_a.state_dict()
         model_b.load_state_dict(state)
@@ -45,7 +54,7 @@ class GrowingTest:
         model_a.eval()
         model_b.eval()
 
-        x = self.random_batch()
+        x = self.random_batch(config)
         y_a = model_a(x)
         y_b = model_b(x)
 
@@ -55,19 +64,20 @@ class GrowingTest:
 
         assert torch.all(diff < 1e-10)
 
-    @pytest.mark.parametrize("config", growth_params)
-    def test_growth_is_minor(self, config):
+    @pytest.mark.parametrize("params", growth_params)
+    def test_growth_is_minor(self, params):
         """With these growth parameters, the function of the network should be
         changed only a litte bit.
         """
 
         torch.manual_seed(0)
 
-        model = self.new_model(config)
+        config = self.new_config(params)
+        model = self.model_class(config)
 
         model.eval()
 
-        x = self.random_batch()
+        x = self.random_batch(config)
 
         y_a = model(x)
 
@@ -86,18 +96,19 @@ class GrowingTest:
         # the change should be minor
         assert torch.all(diff < 1e-3)
 
-    @pytest.mark.parametrize("config", growth_params)
-    def test_growth_exists(self, config):
+    @pytest.mark.parametrize("params", growth_params)
+    def test_growth_exists(self, params):
         """With these growth parameters, the function of the network should be
         changed.
         """
         torch.manual_seed(0)
 
-        model = self.new_model(config)
+        config = self.new_config(params)
+        model = self.model_class(config)
 
         model.eval()
 
-        x = self.random_batch()
+        x = self.random_batch(config)
 
         y_a = model(x)
 
@@ -118,19 +129,20 @@ class GrowingTest:
         # but should be there
         assert torch.any(diff > 1e-12)
 
-    @pytest.mark.parametrize("config", degrowth_params)
-    def test_degrow_to_grown(self, config):
+    @pytest.mark.parametrize("params", degrowth_params)
+    def test_degrow_to_grown(self, params):
         """The model should produce the same output before and after degrow
         (after having called grow).
         """
 
         torch.manual_seed(0)
 
-        model = self.new_model(config)
+        config = self.new_config(params)
+        model = self.model_class(config)
 
         model.eval()
 
-        x = self.random_batch()
+        x = self.random_batch(config)
 
         modules: List[Growing]
         if isinstance(model, GrowingModule):
@@ -154,18 +166,19 @@ class GrowingTest:
 
         assert torch.all(diff < 1e-5)
 
-    @pytest.mark.parametrize("config", degrowth_params)
-    def test_degrow_to_original(self, config):
+    @pytest.mark.parametrize("params", degrowth_params)
+    def test_degrow_to_original(self, params):
         """The model should produce the same output before and after degrow
         (after having called grow).
         """
         torch.manual_seed(0)
 
-        model = self.new_model(config)
+        config = self.new_config(params)
+        model = self.model_class(config)
 
         model.eval()
 
-        x = self.random_batch()
+        x = self.random_batch(config)
 
         y_a = model(x)
 
@@ -198,19 +211,20 @@ class SplittingTest(GrowingTest):
         dict(split=True, num_novel=4, eps_split=1e-4, eps_novel=1e-4, step_size=1),
     ]
 
-    @pytest.mark.parametrize("config", growth_params)
-    def test_growth_is_minor(self, config):
+    @pytest.mark.parametrize("params", growth_params)
+    def test_growth_is_minor(self, params):
         """With these growth parameters, the function of the network should be
         changed only a litte bit.
         """
 
         torch.manual_seed(0)
 
-        model = self.new_model(config)
+        config = self.new_config(params)
+        model = self.model_class(config)
 
         model.eval()
 
-        x = self.random_batch()
+        x = self.random_batch(config)
 
         y_a = model(x)
 

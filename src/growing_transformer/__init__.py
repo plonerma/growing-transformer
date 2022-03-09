@@ -2,6 +2,7 @@ import logging
 import logging.config
 
 from .base import Growing, GrowingModule
+from .configuration import GrowingConfig
 from .trainer import Trainer
 from .transformer import GrowingTransformer
 
@@ -28,6 +29,7 @@ logger = logging.getLogger("growing_transformer")
 __all__ = [
     "Growing",
     "GrowingModule",
-    "Trainer",
+    "GrowingConfig",
     "GrowingTransformer",
+    "Trainer",
 ]

@@ -1,7 +1,6 @@
 import logging
 
 import torch
-from transformers import BertConfig
 from transformers.models.bert.modeling_bert import BertEncoder
 
 from growing_transformer.encoder import GrowingEncoder
@@ -12,30 +11,12 @@ log = logging.getLogger("growing_transformer.tests")
 
 
 class TestTransformerEncoder(GrowingTest):
-    embed_dim = 64
-    hidden_size = 128
-    batches = 16
-    length = 32
-
-    num_heads = 4
-    d_head = 16
-
-    def new_model(self, config):
-        config = {**config, "bert_state_dict": True, "intermediate_act_fn": "gelu"}
-        return GrowingEncoder(self.embed_dim, self.num_heads, self.d_head, self.hidden_size, config=config)
+    model_class = GrowingEncoder
 
     def test_function(self):
         # initialize growing multihead attention block
-        growing_model = self.new_model({})
-
-        # bert multihead attention block
-        configuration = BertConfig(
-            hidden_size=self.embed_dim,
-            num_attention_heads=self.num_heads,
-            intermediate_size=self.hidden_size,
-            hidden_act="gelu",
-            num_hidden_layers=6,
-        )
+        config = self.new_config()
+        growing_model = self.model_class(config)
 
         # get state from growing model
         state = growing_model.state_dict()
@@ -44,7 +25,7 @@ class TestTransformerEncoder(GrowingTest):
         for k, v in state.items():
             log.info(f"- {k}: {v.size()}")
 
-        bert_encoder = BertEncoder(configuration)
+        bert_encoder = BertEncoder(config)
 
         log.info("Bert encoder state:")
         for k, v in bert_encoder.state_dict().items():
@@ -59,7 +40,7 @@ class TestTransformerEncoder(GrowingTest):
         bert_encoder.eval()
         growing_model.eval()
 
-        x = self.random_batch()
+        x = self.random_batch(config)
 
         y_a = growing_model(x)
         y_b = bert_encoder(x)

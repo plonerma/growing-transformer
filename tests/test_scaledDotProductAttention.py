@@ -3,31 +3,25 @@ function. """
 
 import torch
 
-from growing_transformer.scaledDotProductAttention import (
-    GrowingScaledDotProductAttention,
-)
+from growing_transformer.attention import ScaledDotProductAttention
 
 from .base import GrowingTest
 
 
 class TestScaledDotProductAttention(GrowingTest):
-    num_heads = 4
-    d_head = 16
-
-    def new_model(self, config):
-        return GrowingScaledDotProductAttention(
-            self.embed_dim, self.num_heads, self.d_head, batch_first=False, config=config
-        )
+    model_class = ScaledDotProductAttention
 
     def test_function(self):
-        model = self.new_model({})
-        x = self.random_batch()
+        config = self.new_config()
+        model = self.model_class(config)
+
+        x = self.random_batch(config)
 
         in_proj_bias = torch.cat(
             [
                 model.query_linear.bias,
                 model.key_linear.bias,
-                torch.zeros(self.embed_dim),
+                torch.zeros(config.d_model),
             ]
         )
 
@@ -35,19 +29,20 @@ class TestScaledDotProductAttention(GrowingTest):
             [
                 model.query_linear.weight,
                 model.key_linear.weight,
-                torch.eye(self.embed_dim),
+                torch.eye(config.d_model),
             ]
         )
 
-        out_proj_weight = torch.eye(self.embed_dim)
-        out_proj_bias = torch.zeros(self.embed_dim)
+        out_proj_weight = torch.eye(config.d_model)
+        out_proj_bias = torch.zeros(config.d_model)
 
         attn_output, attn_output_weights = torch.nn.functional.multi_head_attention_forward(
-            x,
-            x,
-            x,
-            self.embed_dim,
-            self.num_heads,
+            # function expects (length, batch, ...) tensor
+            x.transpose(1, 0),
+            x.transpose(1, 0),
+            x.transpose(1, 0),
+            config.d_model,
+            config.num_heads,
             in_proj_weight,
             in_proj_bias,
             None,

@@ -1,7 +1,6 @@
 import logging
 
 import torch
-from transformers import BertConfig
 from transformers.models.bert.modeling_bert import BertLayer
 
 from growing_transformer.layer import GrowingLayer
@@ -12,29 +11,12 @@ log = logging.getLogger("growing_transformer.tests")
 
 
 class TestTransformerLayer(GrowingTest):
-    embed_dim = 64
-    hidden_size = 128
-    batches = 16
-    length = 32
-
-    num_heads = 4
-    d_head = 16
-
-    def new_model(self, config):
-        config = {**config, "bert_state_dict": True, "intermediate_act_fn": "gelu"}
-        return GrowingLayer(self.embed_dim, self.num_heads, self.d_head, self.hidden_size, config=config)
+    model_class = GrowingLayer
 
     def test_function(self):
         # initialize growing multihead attention block
-        growing_model = self.new_model({})
-
-        # bert multihead attention block
-        configuration = BertConfig(
-            hidden_size=self.embed_dim,
-            num_attention_heads=self.num_heads,
-            intermediate_size=self.hidden_size,
-            hidden_act="gelu",
-        )
+        config = self.new_config()
+        growing_model = self.model_class(config)
 
         # get state from growing model
         state = growing_model.state_dict()
@@ -43,7 +25,7 @@ class TestTransformerLayer(GrowingTest):
         for k, v in state.items():
             log.info(f"- {k}: {v.size()}")
 
-        bert_layer = BertLayer(configuration)
+        bert_layer = BertLayer(config)
 
         log.info("Bert layer state:")
         for k, v in bert_layer.state_dict().items():
@@ -58,7 +40,7 @@ class TestTransformerLayer(GrowingTest):
         bert_layer.eval()
         growing_model.eval()
 
-        x = self.random_batch()
+        x = self.random_batch(config)
 
         y_a = growing_model(x)
         (y_b,) = bert_layer(x)

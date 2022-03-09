@@ -1,10 +1,9 @@
 import logging
 
 import torch
-from transformers import BertConfig
 from transformers.models.bert.modeling_bert import BertAttention
 
-from growing_transformer.multiheadAttention import GrowingMultiheadAttention
+from growing_transformer.attention import GrowingAttention
 
 from .base import GrowingTest
 
@@ -12,23 +11,12 @@ log = logging.getLogger("growing_transformer.tests")
 
 
 class TestMultiheadAttention(GrowingTest):
-    embed_dim = 64
-    batches = 16
-    length = 32
-
-    num_heads = 4
-    d_head = 16
-
-    def new_model(self, config):
-        config = {**config, "bert_state_dict": True}
-        return GrowingMultiheadAttention(self.embed_dim, self.num_heads, self.d_head, config=config)
+    model_class = GrowingAttention
 
     def test_function(self):
         # initialize growing multihead attention block
-        growing_model = self.new_model({})
-
-        # bert multihead attention block
-        configuration = BertConfig(hidden_size=self.embed_dim, num_attention_heads=self.num_heads)
+        config = self.new_config()
+        growing_model = self.model_class(config)
 
         # get state from growing model
         state = growing_model.state_dict()
@@ -37,7 +25,7 @@ class TestMultiheadAttention(GrowingTest):
         for k, v in state.items():
             log.info(f"{k}: {v.size()}")
 
-        bert_attention = BertAttention(configuration)
+        bert_attention = BertAttention(config)
 
         assert bert_attention.state_dict().keys() == state.keys()
 
@@ -48,7 +36,7 @@ class TestMultiheadAttention(GrowingTest):
         bert_attention.eval()
         growing_model.eval()
 
-        x = self.random_batch()
+        x = self.random_batch(config)
         # x = torch.rand(batches, length, embed_dim)
 
         y_a, attn_a = growing_model(x, return_attention=True)

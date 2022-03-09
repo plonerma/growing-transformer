@@ -1,8 +1,8 @@
-from typing import Any, Mapping
+from .base import Growing
+from .configuration import GrowingConfig
 
-import torch
 
-
-class GrowingTransformer(torch.nn.Module):
-    def __init__(self, *, config: Mapping[str, Any]):
+class GrowingTransformer(Growing):
+    def __init__(self, config: GrowingConfig):
+        super().__init__(config=config)
         raise NotImplementedError

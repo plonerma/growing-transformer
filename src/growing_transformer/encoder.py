@@ -1,20 +1,14 @@
-from typing import Any, Mapping
-
 import torch
 
 from .base import Growing
+from .configuration import GrowingConfig
 from .layer import GrowingLayer
 
 
 class GrowingEncoder(Growing):
-    def __init__(self, embed_dim, num_heads, d_head, hidden_size, *, config: Mapping[str, Any]):
+    def __init__(self, config: GrowingConfig):
         super().__init__(config=config)
-        self.layer = torch.nn.ModuleList(
-            [
-                GrowingLayer(embed_dim, num_heads, d_head, hidden_size, config=config)
-                for _ in range(self.get_config("num_hidden_layers", default=6))
-            ]
-        )
+        self.layer = torch.nn.ModuleList([GrowingLayer(config=config) for _ in range(self.config.num_hidden_layers)])
 
     def forward(self, x):
         for layer in self.layer:

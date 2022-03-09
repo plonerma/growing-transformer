@@ -4,5 +4,4 @@ from .base import SplittingTest
 
 
 class TestMLP(SplittingTest):
-    def new_model(self, config):
-        return GrowingMLP(self.embed_dim, 8, 12, config=config)
+    model_class = GrowingMLP
