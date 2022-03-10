@@ -79,7 +79,7 @@ class Trainer:
     def tune_direction(self, *args, **kwargs):
         self.tune_with_penalty(list(self.model.direction_params()), *args, **kwargs)
 
-    def tune_new_neurons(self, *args, **kwargs):
+    def tune_new_parts(self, *args, **kwargs):
         self.tune_with_penalty(list(self.model.new_params()), *args, **kwargs)
 
     def calculate_new_gradient(

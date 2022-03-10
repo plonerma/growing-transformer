@@ -36,7 +36,7 @@ class GrowingAttention(GrowingModule):
 
     def reset_grow_state(self) -> None:
         # step size (used to calculate gradients for selecting kept neurons)
-        self.new_neurons = None
+        self.new_parts = None
 
         # update directions (to be trained) after growing
         self._value_weight: Optional[torch.nn.Parameter] = None
@@ -66,7 +66,7 @@ class GrowingAttention(GrowingModule):
 
         out = self.output_linear(out)
 
-        if self.new_neurons is not None:
+        if self.new_parts is not None:
             assert self._value_weight is not None
             assert self._value_bias is not None
             assert self._output_weight is not None
@@ -75,7 +75,7 @@ class GrowingAttention(GrowingModule):
             value_novel = value_novel.view(batch, length, self.heads, -1)
 
             out_novel = torch.einsum(einsum_str, attention, value_novel)
-            out_novel = out_novel * self.new_neurons[None, None, :, :]
+            out_novel = out_novel * self.new_parts[None, None, :, :]
             out_novel = out_novel.reshape(batch, length, -1)
 
             # linear transform (like output_linear)
@@ -97,7 +97,7 @@ class GrowingAttention(GrowingModule):
         eps_novel_bias = self.config.eps_novel_bias
 
         # add parameter to measure influence/gradient of adding new neurons
-        self.new_neurons = Parameter(torch.ones(self.heads, num_novel) * step_size, requires_grad=False)
+        self.new_parts = Parameter(torch.ones(self.heads, num_novel) * step_size, requires_grad=False)
 
         # create update direction for weight and bias
         self._output_weight = None
@@ -110,7 +110,7 @@ class GrowingAttention(GrowingModule):
         uniform_(self._output_weight, -eps_novel_weight, eps_novel_weight)
         uniform_(self._value_bias, -eps_novel_bias, eps_novel_bias)
 
-        return self.new_neurons.size()
+        return self.new_parts.size()
 
     def degrow(self, selected: Tensor) -> None:
         with torch.no_grad():
@@ -121,7 +121,7 @@ class GrowingAttention(GrowingModule):
 
             assert selected.size(0) % self.heads == 0
 
-            assert self.new_neurons is not None
+            assert self.new_parts is not None
             assert self._value_weight is not None
             assert self._value_bias is not None
             assert self._output_weight is not None
@@ -141,7 +141,7 @@ class GrowingAttention(GrowingModule):
             output_weight[..., : self.d_head] = self.output_linear.weight.view(self.d_model, self.heads, self.d_head)
 
             # copy new neurons
-            selected_steps = self.new_neurons.view(-1)[selected].view(self.heads, -1)
+            selected_steps = self.new_parts.view(-1)[selected].view(self.heads, -1)
 
             value_weight[:, self.d_head :, :] = (
                 self._value_weight.view(-1, self.d_model)[selected].view(self.heads, -1, self.d_model)
@@ -176,7 +176,7 @@ class ScaledDotProductAttention(GrowingModule):
 
     def reset_grow_state(self) -> None:
         # step size (used to calculate gradients for selecting kept neurons)
-        self.new_neurons = None
+        self.new_parts = None
 
         # update directions (to be trained)
         self._weight: Optional[torch.nn.Parameter] = None
@@ -209,12 +209,12 @@ class ScaledDotProductAttention(GrowingModule):
         einsum_str = "bqhe,bkhe->bhqk"
         product: torch.Tensor = torch.einsum(einsum_str, q, k)
 
-        if self.new_neurons is not None:
+        if self.new_parts is not None:
             assert self._weight is not None and self._bias is not None
 
             q_novel = torch.nn.functional.linear(x, self._weight[0], self._bias[0])
             q_novel = q_novel.view(batch_size, length, self.heads, -1)
-            q_novel = q_novel * self.new_neurons
+            q_novel = q_novel * self.new_parts
 
             k_novel = torch.nn.functional.linear(x, self._weight[1], self._bias[1])
             k_novel = k_novel.view(batch_size, length, self.heads, -1)
@@ -232,7 +232,7 @@ class ScaledDotProductAttention(GrowingModule):
         eps_novel_bias = self.config.eps_novel_bias
 
         # add parameter to measure influence/gradient of adding new neurons
-        self.new_neurons = torch.nn.Parameter(torch.ones(self.heads, num_novel) * step_size, requires_grad=False)
+        self.new_parts = torch.nn.Parameter(torch.ones(self.heads, num_novel) * step_size, requires_grad=False)
 
         # create update direction for weight and bias
         self._weight = torch.nn.Parameter(torch.empty(2, self.heads * num_novel, self.d_model), requires_grad=False)
@@ -243,12 +243,12 @@ class ScaledDotProductAttention(GrowingModule):
 
         torch.nn.init.uniform_(self._bias, -eps_novel_bias, eps_novel_bias)
 
-        return self.new_neurons.size()
+        return self.new_parts.size()
 
     def degrow(self, selected: torch.Tensor) -> None:
         with torch.no_grad():
 
-            if self.new_neurons is None:
+            if self.new_parts is None:
                 return
 
             assert self._weight is not None
@@ -272,7 +272,7 @@ class ScaledDotProductAttention(GrowingModule):
             k_bias[:, : self.d_head] = self.key_linear.bias.view(self.heads, self.d_head)
 
             # copy new neurons
-            selected_steps = self.new_neurons.view(-1)[selected].view(self.heads, -1)
+            selected_steps = self.new_parts.view(-1)[selected].view(self.heads, -1)
 
             # temporarily merge heads and output dimension
             selected_weight = self._weight.view(2, -1, self.d_model)
