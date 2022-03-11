@@ -54,7 +54,9 @@ class GrowingAttention(GrowingModule):
     def in_features(self) -> int:
         return self.d_model
 
-    def forward(self, x: Tensor, return_attention: bool = False) -> Union[Tensor, Tuple[Tensor, Tensor]]:
+    def forward(
+        self, x: Tensor, return_attention: bool = False, influence_factor=1.0
+    ) -> Union[Tensor, Tuple[Tensor, Tensor]]:
         batch, length, _ = x.size()
 
         attention = self.dot_product(x)
@@ -83,7 +85,8 @@ class GrowingAttention(GrowingModule):
 
             out += out_novel
 
-        out = self.layer_norm(out + x)
+        out = out * influence_factor
+        out = self.layer_norm(x + out)
 
         if not return_attention:
             return out

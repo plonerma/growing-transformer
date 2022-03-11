@@ -8,14 +8,17 @@ from growing_transformer import Growing, GrowingConfig, GrowingModule
 
 log = logging.getLogger("growing_transformer.tests")
 
+log.setLevel(logging.DEBUG)
+
 
 class GrowingTest:
     num_batches = 16
     length = 32
+    d_model = 64
 
     base_config = dict(
         hidden_act="gelu",
-        d_model=64,
+        d_model=d_model,
         num_heads=4,
         d_head=16,
         intermediate_size=128,
@@ -37,16 +40,21 @@ class GrowingTest:
         dict(split=True, num_novel=4, eps_split=0.1, eps_novel=0.2, step_size=1.0),
     ]
 
-    def random_batch(self, config):
-        return torch.rand(self.num_batches, self.length, config.d_model)
+    def random_batch(self, size=None):
+        return torch.rand(self.num_batches, self.length, size or self.d_model)
 
     def new_config(self, params={}):
         return GrowingConfig(**params, **self.base_config)
 
+    def new_model(self, config={}):
+        """Subtests might overwrite this in order to change initialization."""
+        if not isinstance(config, GrowingConfig):
+            config = self.new_config(config)
+        return self.model_class(config)
+
     def test_state_loading(self):
-        config = self.new_config({})
-        model_a = self.model_class(config)
-        model_b = self.model_class(config)
+        model_a = self.new_model()
+        model_b = self.new_model()
 
         state = model_a.state_dict()
         model_b.load_state_dict(state)
@@ -54,7 +62,7 @@ class GrowingTest:
         model_a.eval()
         model_b.eval()
 
-        x = self.random_batch(config)
+        x = self.random_batch()
         y_a = model_a(x)
         y_b = model_b(x)
 
@@ -72,12 +80,11 @@ class GrowingTest:
 
         torch.manual_seed(0)
 
-        config = self.new_config(params)
-        model = self.model_class(config)
+        model = self.new_model(params)
 
         model.eval()
 
-        x = self.random_batch(config)
+        x = self.random_batch()
 
         y_a = model(x)
 
@@ -103,12 +110,11 @@ class GrowingTest:
         """
         torch.manual_seed(0)
 
-        config = self.new_config(params)
-        model = self.model_class(config)
+        model = self.new_model(params)
 
         model.eval()
 
-        x = self.random_batch(config)
+        x = self.random_batch()
 
         y_a = model(x)
 
@@ -137,12 +143,11 @@ class GrowingTest:
 
         torch.manual_seed(0)
 
-        config = self.new_config(params)
-        model = self.model_class(config)
+        model = self.new_model(params)
 
         model.eval()
 
-        x = self.random_batch(config)
+        x = self.random_batch()
 
         modules: List[Growing]
         if isinstance(model, GrowingModule):
@@ -157,6 +162,8 @@ class GrowingTest:
         # degrow keeping all neurons
         for m, size in zip(modules, sizes):
             m.degrow(torch.arange(size.numel()))
+
+        model.eval()
 
         y_b = model(x)
 
@@ -173,12 +180,11 @@ class GrowingTest:
         """
         torch.manual_seed(0)
 
-        config = self.new_config(params)
-        model = self.model_class(config)
+        model = self.new_model(params)
 
         model.eval()
 
-        x = self.random_batch(config)
+        x = self.random_batch()
 
         y_a = model(x)
 
@@ -219,12 +225,11 @@ class SplittingTest(GrowingTest):
 
         torch.manual_seed(0)
 
-        config = self.new_config(params)
-        model = self.model_class(config)
+        model = self.new_model(params)
 
         model.eval()
 
-        x = self.random_batch(config)
+        x = self.random_batch()
 
         y_a = model(x)
 

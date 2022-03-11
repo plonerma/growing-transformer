@@ -14,8 +14,7 @@ class TestGrowingTransformer(GrowingTest):
     def test_transformer_function(self):
         # initialize growing transformer
         config = self.new_config()
-
-        growing_model = GrowingTransformer(config)
+        growing_model = self.new_model(config)
 
         # get state from that model
         state = growing_model.state_dict()

@@ -13,9 +13,9 @@ class TestScaledDotProductAttention(GrowingTest):
 
     def test_function(self):
         config = self.new_config()
-        model = self.model_class(config)
+        model = self.new_model(config)
 
-        x = self.random_batch(config)
+        x = self.random_batch()
 
         in_proj_bias = torch.cat(
             [

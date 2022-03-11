@@ -26,8 +26,14 @@ class GrowingLayer(Growing):
             self._register_state_dict_hook(self._bert_state_dict_hook)
             self._register_load_state_dict_pre_hook(self._load_bert_state_dict_pre_hook)
 
-    def forward(self, x):
-        x = self.attention(x)
-        out = self.mlp(x)
-        out = self.layer_norm(x + out)
-        return out
+    def forward(self, x, influence_factor=1.0):
+        x1 = self.attention(x, influence_factor=influence_factor)
+        mlp_out = self.mlp(x1) * influence_factor
+        x2 = self.layer_norm(x1 + mlp_out)
+        return x2
+
+    def apply_influence_factor(self, f):
+        self.mlp.linear_out.weight.data *= f
+        self.mlp.linear_out.bias.data *= f
+        self.attention.output_linear.weight.data *= f
+        self.attention.output_linear.bias.data *= f

@@ -13,10 +13,22 @@ log = logging.getLogger("growing_transformer.tests")
 class TestTransformerEncoder(GrowingTest):
     model_class = GrowingEncoder
 
+    def new_model(self, config={}):
+        model = super().new_model(config)
+
+        # initialize layer norms with differen values
+        for name, param in model.named_parameters():
+            if name.endswith("layer_norm.weight"):
+                torch.nn.init.uniform_(param, -1, 1)
+            elif name.endswith("layer_norm.bias"):
+                torch.nn.init.uniform_(param, -0.2, 0.2)
+
+        return model
+
     def test_function(self):
         # initialize growing multihead attention block
         config = self.new_config()
-        growing_model = self.model_class(config)
+        growing_model = self.new_model(config)
 
         # get state from growing model
         state = growing_model.state_dict()
@@ -40,13 +52,15 @@ class TestTransformerEncoder(GrowingTest):
         bert_encoder.eval()
         growing_model.eval()
 
-        x = self.random_batch(config)
+        x = self.random_batch()
 
         y_a = growing_model(x)
         y_b = bert_encoder(x)
 
         y_b = y_b.last_hidden_state
 
-        print(y_b)
+        diff = torch.abs(y_a - y_b)
 
-        assert torch.all(torch.abs(y_a - y_b) < 1e-5)
+        log.info(f"Max. difference: {diff.max()}")
+
+        assert torch.all(diff < 1e-5)

@@ -16,7 +16,7 @@ class TestMultiheadAttention(GrowingTest):
     def test_function(self):
         # initialize growing multihead attention block
         config = self.new_config()
-        growing_model = self.model_class(config)
+        growing_model = self.new_model(config)
 
         # get state from growing model
         state = growing_model.state_dict()
@@ -36,7 +36,7 @@ class TestMultiheadAttention(GrowingTest):
         bert_attention.eval()
         growing_model.eval()
 
-        x = self.random_batch(config)
+        x = self.random_batch()
         # x = torch.rand(batches, length, embed_dim)
 
         y_a, attn_a = growing_model(x, return_attention=True)
