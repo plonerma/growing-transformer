@@ -14,8 +14,6 @@ log = logging.getLogger("growing_transformer")
 train_data = SineToyDataset(8000)
 grow_data = SineToyDataset(2000)
 
-criterion = torch.nn.MSELoss()
-
 grid = GridSearch(
     dict(
         seed=range(1),
@@ -98,7 +96,7 @@ for i, p in enumerate(grid):
                 if selected.numel():
                     tensorboard_writer.add_histogram(f"selected neurons/{m.__class__.__name__}", selected, growth_phase)
 
-    trainer = Trainer(model, criterion, grow_func)
+    trainer = Trainer(model, grow_func)
 
     try:
         metrics = trainer.train(train_data, propagate_interrupt=True, tensorboard_writer=tensorboard_writer, **hparams)

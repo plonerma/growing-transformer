@@ -11,12 +11,17 @@ class SimpleModel(Growing):
         self.a = MLP(n_in, h, a, config=config)
         self.b = MLP(h, n_out, b, config=config)
         self.dropout = torch.nn.Dropout()
+        self.criterion = torch.nn.MSELoss()
 
     def forward(self, x):
         x = self.a(x)
         x = self.dropout(x)
         x = self.b(x)
         return x
+
+    def forward_loss(self, batch):
+        x, y = batch
+        return self.criterion(self(x), y)
 
 
 class SineToyDataset(Dataset):

@@ -14,9 +14,8 @@ log = logging.getLogger("growing_transformer")
 
 
 class Trainer:
-    def __init__(self, model, criterion, grow_func=None):
+    def __init__(self, model, grow_func=None):
         self.model = model
-        self.criterion = criterion
         self.grow_func = grow_func
 
     @contextmanager
@@ -62,11 +61,10 @@ class Trainer:
                 num_workers=0 if num_workers is None else num_workers,
             )
 
-            for train_x, train_y in batch_loader:
+            for batch in batch_loader:
                 optimizer.zero_grad()
 
-                y = self.model(train_x)
-                loss = self.criterion(y, train_y)
+                loss = self.model.forward_loss(batch)
 
                 penalty = torch.tensor(0.0)
                 for p in params:
@@ -96,9 +94,8 @@ class Trainer:
         with self.some_grad_only(*self.model.new_params()):
             self.model.zero_grad()
 
-            for train_x, train_y in batch_loader:
-                y = self.model(train_x)
-                loss = self.criterion(y, train_y)
+            for batch in batch_loader:
+                loss = self.model.forward_loss(batch)
                 loss.backward()
 
     def train(
@@ -159,13 +156,11 @@ class Trainer:
                         num_workers=0 if num_workers is None else num_workers,
                     )
 
-                    for train_x, train_y in batch_loader:
+                    for batch in batch_loader:
 
                         optimizer.zero_grad()
 
-                        y = self.model(train_x)
-                        loss = self.criterion(y, train_y)
-
+                        loss = self.model.forward_loss(batch)
                         loss.backward()
                         optimizer.step()
 
