@@ -4,8 +4,8 @@ import torch
 from torch.nn import ModuleList, Parameter
 from torch.nn.init import uniform_
 
+from ..configuration import GrowingConfig
 from .base import GrowingModule
-from .configuration import GrowingConfig
 from .layer import GrowingLayer
 
 

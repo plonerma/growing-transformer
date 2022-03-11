@@ -3,7 +3,7 @@ import logging
 import torch
 from transformers.models.bert.modeling_bert import BertEncoder
 
-from growing_transformer.encoder import GrowingEncoder
+from growing_transformer.model import GrowingEncoder
 
 from .base import GrowingTest
 

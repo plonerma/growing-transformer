@@ -3,7 +3,7 @@ from typing import Iterable, Mapping, Optional
 
 import torch
 
-from .configuration import GrowingConfig
+from ..configuration import GrowingConfig
 
 
 class Growing(torch.nn.Module):

@@ -1,4 +1,4 @@
-from growing_transformer.mlp import GrowingMLP
+from growing_transformer.model import GrowingMLP
 
 from .base import SplittingTest
 

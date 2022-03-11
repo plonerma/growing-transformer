@@ -4,7 +4,7 @@ import pytest
 import torch
 from transformers.models.bert.modeling_bert import BertLayer
 
-from growing_transformer.layer import GrowingLayer
+from growing_transformer.model import GrowingLayer
 
 from .base import GrowingTest
 

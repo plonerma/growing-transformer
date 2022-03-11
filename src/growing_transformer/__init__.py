@@ -1,10 +1,9 @@
 import logging
 import logging.config
 
-from .base import Growing, GrowingModule
 from .configuration import GrowingConfig
+from .model import Growing, GrowingModule, GrowingTransformer
 from .trainer import Trainer
-from .transformer import GrowingTransformer
 
 logging.config.dictConfig(
     {

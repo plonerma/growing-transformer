@@ -1,8 +1,8 @@
 import torch
 
+from ..configuration import GrowingConfig
 from .attention import GrowingAttention
 from .base import Growing
-from .configuration import GrowingConfig
 from .mlp import GrowingMLP as MLP
 
 

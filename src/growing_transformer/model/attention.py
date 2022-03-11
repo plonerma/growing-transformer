@@ -5,8 +5,8 @@ from torch import Tensor
 from torch.nn import LayerNorm, Linear, Parameter
 from torch.nn.init import uniform_
 
+from ..configuration import GrowingConfig
 from .base import GrowingModule
-from .configuration import GrowingConfig
 
 
 class GrowingAttention(GrowingModule):

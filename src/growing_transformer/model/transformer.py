@@ -1,5 +1,5 @@
+from ..configuration import GrowingConfig
 from .base import Growing
-from .configuration import GrowingConfig
 
 
 class GrowingTransformer(Growing):

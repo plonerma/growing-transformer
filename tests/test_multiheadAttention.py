@@ -3,7 +3,7 @@ import logging
 import torch
 from transformers.models.bert.modeling_bert import BertAttention
 
-from growing_transformer.attention import GrowingAttention
+from growing_transformer.model import GrowingAttention
 
 from .base import GrowingTest
 

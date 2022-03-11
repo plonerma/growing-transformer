@@ -5,8 +5,8 @@ from torch.nn import Parameter
 from torch.nn.init import uniform_
 from transformers.activations import ACT2FN
 
-from . import GrowingModule
-from .configuration import GrowingConfig
+from ..configuration import GrowingConfig
+from .base import GrowingModule
 
 
 class GrowingMLP(GrowingModule):
