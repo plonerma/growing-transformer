@@ -8,7 +8,7 @@ import torch
 from torch.optim.lr_scheduler import OneCycleLR  # type: ignore
 from torch.utils.data import DataLoader
 
-from .train_util import log_line
+from .util import log_line
 
 log = logging.getLogger("growing_transformer")
 
