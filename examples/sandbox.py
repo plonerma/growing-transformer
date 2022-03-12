@@ -1,15 +1,21 @@
 import torch
 from torch.utils.data import Dataset
 
-from growing_transformer import Growing
-from growing_transformer.mlp import GrowingMLP as MLP
+from growing_transformer.model import Growing, GrowingMLP as MLP
 
 
 class SimpleModel(Growing):
     def __init__(self, n_in, n_out, h, a, b, config={}):
         super().__init__(config)
-        self.a = MLP(n_in, h, a, config=config)
-        self.b = MLP(h, n_out, b, config=config)
+        self.a = MLP(
+            in_features=n_in,
+            out_features=h,
+            hidden_features=a,
+            config=config)
+        self.b = MLP(
+            in_features=h,
+            out_features=n_out,
+            hidden_features=b, config=config)
         self.dropout = torch.nn.Dropout()
         self.criterion = torch.nn.MSELoss()
 

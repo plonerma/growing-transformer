@@ -6,8 +6,8 @@ from sandbox import SimpleModel, SineToyDataset
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
 
-from growing_transformer import Trainer
-from growing_transformer.train_util import GridSearch, log_line
+from growing_transformer import Trainer, GrowingConfig
+from growing_transformer.trainer.util import GridSearch, log_line
 
 log = logging.getLogger("growing_transformer")
 
@@ -42,7 +42,7 @@ for i, p in enumerate(grid):
 
     torch.manual_seed(hparams["seed"])
 
-    model = SimpleModel(1, 1, 8, 2, 2, config=hparams)
+    model = SimpleModel(1, 1, 8, 2, 2, config=GrowingConfig(**hparams))
 
     run_name = f"run_{i:04}"
     tensorboard_writer = SummaryWriter(f"runs/firefly/{run_name}")
@@ -59,7 +59,7 @@ for i, p in enumerate(grid):
             sizes.append(m.grow())
 
         trainer.tune_direction(grow_data)
-        trainer.tune_new_neurons(grow_data)
+        trainer.tune_new_parts(grow_data)
 
         trainer.calculate_new_gradient(grow_data)
 
