@@ -1,4 +1,5 @@
-from .trainer import Trainer
+from .base import BaseTrainer
+from .growing import GrowingTrainer
 from .util import GridSearch
 
-__all__ = ["Trainer"]
+__all__ = ["BaseTrainer", "GrowingTrainer", "GridSearch"]

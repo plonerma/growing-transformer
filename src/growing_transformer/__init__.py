@@ -2,8 +2,8 @@ import logging
 import logging.config
 
 from .configuration import GrowingConfig
-from .model import Growing, GrowingModule, GrowingTransformer
-from .trainer import Trainer
+from .model import Growing, GrowingMLMTransformer, GrowingModule, GrowingTransformer
+from .trainer import BaseTrainer, GrowingTrainer
 
 logging.config.dictConfig(
     {
@@ -30,5 +30,7 @@ __all__ = [
     "GrowingModule",
     "GrowingConfig",
     "GrowingTransformer",
-    "Trainer",
+    "GrowingMLMTransformer",
+    "BaseTrainer",
+    "GrowingTrainer",
 ]
