@@ -5,7 +5,7 @@ import torch
 from sandbox import SimpleModel, SineToyDataset
 from torch.utils.tensorboard import SummaryWriter
 
-from growing_transformer import Trainer, GrowingConfig
+from growing_transformer import GrowingConfig, GrowingTrainer
 from growing_transformer.trainer.util import GridSearch, log_line
 
 log = logging.getLogger("growing_transformer")
@@ -96,7 +96,7 @@ for i, p in enumerate(grid):
                 if selected.numel():
                     tensorboard_writer.add_histogram(f"selected neurons/{m.__class__.__name__}", selected, growth_phase)
 
-    trainer = Trainer(model, grow_func)
+    trainer = GrowingTrainer(model)
 
     try:
         metrics = trainer.train(train_data, propagate_interrupt=True, tensorboard_writer=tensorboard_writer, **hparams)
