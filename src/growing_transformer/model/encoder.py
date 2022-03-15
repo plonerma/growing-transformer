@@ -1,6 +1,7 @@
 from typing import Optional
 
 import torch
+from torch import BoolTensor, Tensor
 from torch.nn import ModuleList, Parameter
 from torch.nn.init import uniform_
 
@@ -22,13 +23,16 @@ class GrowingEncoder(GrowingModule):
 
         self._new_layers: ModuleList = ModuleList()
 
-    def forward(self, x):
+    def forward(self, x: Tensor, attention_mask: Optional[BoolTensor] = None):
         for i, layer in enumerate(self.layer):
-            x = layer(x)
+            x = layer(x, attention_mask=attention_mask)
 
             if self.new_parts is not None:
-                x = self._new_layers[i](x, influence_factor=self.new_parts[i])
+                x = self._new_layers[i](x, influence_factor=self.new_parts[i], attention_mask=attention_mask)
         return x
+
+    def _direction_params(self):
+        return list(self._new_layers.parameters())
 
     def grow(self):
         # one layer in every possible location: between all existing layers + at the start and end

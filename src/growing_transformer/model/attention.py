@@ -1,7 +1,7 @@
 from typing import Iterable, Optional, Tuple, Union
 
 import torch
-from torch import Tensor
+from torch import BoolTensor, Tensor
 from torch.nn import LayerNorm, Linear, Parameter
 from torch.nn.init import uniform_
 
@@ -55,11 +55,15 @@ class GrowingAttention(GrowingModule):
         return self.d_model
 
     def forward(
-        self, x: Tensor, return_attention: bool = False, influence_factor=1.0
+        self,
+        x: Tensor,
+        return_attention: bool = False,
+        influence_factor=1.0,
+        attention_mask: Optional[BoolTensor] = None,
     ) -> Union[Tensor, Tuple[Tensor, Tensor]]:
         batch, length, _ = x.size()
 
-        attention = self.dot_product(x)
+        attention = self.dot_product(x, attention_mask=attention_mask)
 
         value = self.value_linear(x).view(batch, length, self.heads, self.d_head)
 
@@ -199,7 +203,7 @@ class ScaledDotProductAttention(GrowingModule):
     def in_features(self) -> int:
         return self.d_model
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(self, x: torch.Tensor, attention_mask: Optional[BoolTensor] = None) -> torch.Tensor:
         batch_size, length, _ = x.size()
 
         q = self.query_linear(x).view(batch_size, length, self.heads, -1)
@@ -225,6 +229,14 @@ class ScaledDotProductAttention(GrowingModule):
             product = product + torch.einsum(einsum_str, q_novel, k_novel)
 
         product = product / torch.sqrt(torch.tensor(self.d_head))
+
+        if attention_mask is not None:
+            product = product.masked_fill(
+                # apply mask to every head
+                attention_mask[:, None, :, :],
+                # fill with very small value
+                -10000,
+            )
 
         return torch.softmax(product, dim=-1)
 
