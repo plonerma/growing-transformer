@@ -6,7 +6,8 @@ from sandbox import SimpleModel, SineToyDataset
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
 
-from growing_transformer import GrowingConfig, GrowingTrainer
+from growing_transformer import GrowingConfig, GrowingTrainer, GrowthSchedule
+from growing_transformer.model import GrowingMLP as MLP
 from growing_transformer.trainer.util import GridSearch, log_line
 
 log = logging.getLogger("growing_transformer")
@@ -33,7 +34,7 @@ for i, p in enumerate(grid):
         growth_phases=5,
         num_epochs=5,
         use_onecycle=True,
-        num_kept_neurons=2,
+        num_new_parts=2,
     )
 
     hparams.update(p)
@@ -52,27 +53,21 @@ for i, p in enumerate(grid):
         tensorboard_writer.add_graph(model, example_x)
         break
 
-    def grow_func(trainer, model, growth_phase):
-
-        sizes = list()
-        for m in model.growing_modules():
-            sizes.append(m.grow())
-
-        trainer.tune_direction(grow_data)
-        trainer.tune_new_parts(grow_data)
-
-        trainer.calculate_new_gradient(grow_data)
-
-        for m in model.growing_modules():
-            selected = m.select(hparams["num_kept_neurons"])
-            m.degrow(selected)
-            if selected.numel():
-                tensorboard_writer.add_histogram(f"selected neurons/{m.__class__.__name__}", selected, growth_phase)
-
     trainer = GrowingTrainer(model)
 
+    schedule = GrowthSchedule(hparams["num_epochs"])
+
+    for _ in range(hparams["growth_phases"]):
+        schedule.add_phase(
+            epochs=hparams["num_epochs"],
+            grow={MLP: dict(split=hparams["split"], num_novel=hparams["num_novel"])},
+            num_new_parts={MLP: hparams["num_new_parts"]},
+        )
+
     try:
-        metrics = trainer.train(train_data, propagate_interrupt=True, tensorboard_writer=tensorboard_writer, **hparams)
+        metrics = trainer.train(
+            train_data, schedule=schedule, propagate_interrupt=True, tensorboard_writer=tensorboard_writer, **hparams
+        )
         tensorboard_writer.add_hparams(hparams, metrics, run_name=".")
     except KeyboardInterrupt:
         log_line(log)

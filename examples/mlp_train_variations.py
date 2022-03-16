@@ -5,7 +5,8 @@ import torch
 from sandbox import SimpleModel, SineToyDataset
 from torch.utils.tensorboard import SummaryWriter
 
-from growing_transformer import GrowingConfig, GrowingTrainer
+from growing_transformer import GrowingConfig, GrowingTrainer, GrowthSchedule
+from growing_transformer.model import GrowingMLP as MLP
 from growing_transformer.trainer.util import GridSearch, log_line
 
 log = logging.getLogger("growing_transformer")
@@ -57,49 +58,21 @@ for i, p in enumerate(grid):
     run_name = f"run_{i:04}"
     tensorboard_writer = SummaryWriter(f"runs/variations/{run_name}")
 
-    def grow_func(trainer, model, growth_phase):
+    trainer = GrowingTrainer(model, tune_direction=True, tune_new_parts=True, selection_method="firefly")
 
-        sizes = list()
-        for m in model.growing_modules():
-            sizes.append(m.grow())
+    schedule = GrowthSchedule(hparams["num_epochs"])
 
-        if hparams["tune_direction"]:
-            trainer.tune_direction(grow_data)
-
-        if hparams["tune_new_neurons"]:
-            trainer.tune_new_parts(grow_data)
-
-        if hparams["neuron_selection"] == "firefly":
-            trainer.calculate_new_gradient(grow_data)
-
-            for m in model.growing_modules():
-                selected = m.select(hparams["num_kept_neurons"])
-                m.degrow(selected)
-                if selected.numel():
-                    tensorboard_writer.add_histogram(f"selected neurons/{m.__class__.__name__}", selected, growth_phase)
-        else:
-            assert hparams["neuron_selection"] == "random"
-
-            for s, m in zip(sizes, model.growing_modules()):
-
-                if len(s) == 0:
-                    continue
-                *shape, n_neurons = s
-
-                selected = torch.stack(
-                    [torch.randperm(n_neurons)[: hparams["num_kept_neurons"]] for _ in range(s.numel() // n_neurons)]
-                )
-
-                selected = selected.reshape(*shape, -1)
-
-                m.degrow(selected)
-                if selected.numel():
-                    tensorboard_writer.add_histogram(f"selected neurons/{m.__class__.__name__}", selected, growth_phase)
-
-    trainer = GrowingTrainer(model)
+    for _ in range(hparams["growth_phases"]):
+        schedule.add_phase(
+            epochs=hparams["num_epochs"],
+            grow={MLP: dict(split=hparams["split"], num_novel=hparams["num_novel"])},
+            num_new_parts={MLP: hparams["num_new_parts"]},
+        )
 
     try:
-        metrics = trainer.train(train_data, propagate_interrupt=True, tensorboard_writer=tensorboard_writer, **hparams)
+        metrics = trainer.train(
+            train_data, schedule=schedule, propagate_interrupt=True, tensorboard_writer=tensorboard_writer, **hparams
+        )
         tensorboard_writer.add_hparams(hparams, metrics, run_name=".")
     except KeyboardInterrupt:
         log_line(log)

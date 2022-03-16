@@ -110,10 +110,8 @@ class GrowingMLP(GrowingModule):
 
         return y
 
-    def grow(self) -> torch.Size:
+    def grow(self, num_novel: int = 0, split: bool = True) -> torch.Size:
         step_size = self.config.step_size
-        split = self.config.mlp_split
-        num_novel = self.config.mlp_num_novel
         eps_split_weight = self.config.eps_split_weight
         eps_split_bias = self.config.eps_split_bias
         eps_novel_weight = self.config.eps_novel_weight

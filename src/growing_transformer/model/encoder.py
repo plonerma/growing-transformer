@@ -34,7 +34,7 @@ class GrowingEncoder(GrowingModule):
     def _direction_params(self):
         return list(self._new_layers.parameters())
 
-    def grow(self):
+    def grow(self, num_novel: int = 0, split: bool = False) -> torch.Size:
         # one layer in every possible location: between all existing layers + at the start and end
         new_layers = len(self.layer)
 

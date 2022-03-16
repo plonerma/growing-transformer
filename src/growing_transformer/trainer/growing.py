@@ -6,6 +6,7 @@ import torch
 from torch.utils.data import DataLoader
 
 from .base import BaseTrainer
+from .schedule import GrowthSchedule
 from .util import log_line
 
 log = logging.getLogger("growing_transformer")
@@ -18,7 +19,7 @@ class GrowingTrainer(BaseTrainer):
         *,
         tune_direction: bool = True,
         tune_new_parts: bool = True,
-        selection_method="random",
+        selection_method="firefly",
     ):
         super().__init__(model)
 
@@ -26,13 +27,13 @@ class GrowingTrainer(BaseTrainer):
         self._tune_new_parts = tune_new_parts
         self._selection_method = selection_method
 
-    def grow_model(self, growth_phase, grow_data=None, tensorboard_writer=None):
+    def grow_model(self, phase, grow_data=None, tensorboard_writer=None):
 
         # TODO: make sure modules are grown in proper order
         sizes = list()
 
         for m in self.model.growing_modules():
-            sizes.append(m.grow())
+            sizes.append(m.grow(phase.grow_params(m)))
 
         if self._tune_direction:
             assert grow_data is not None
@@ -47,10 +48,10 @@ class GrowingTrainer(BaseTrainer):
 
             for m in self.model.growing_modules():
                 # TODO: This needs to be adapted to account for different modules
-                selected = m.select(hparams["num_kept_neurons"])
+                selected = m.select(phase.num_kept_parts(m))
                 m.degrow(selected)
                 if tensorboard_writer is not None and selected.numel():
-                    tensorboard_writer.add_histogram(f"selected neurons/{m.__class__.__name__}", selected, growth_phase)
+                    tensorboard_writer.add_histogram(f"selected neurons/{m.__class__.__name__}", selected, phase.index)
 
         elif self._selection_method == "random":
             for s, m in zip(sizes, self.model.growing_modules()):
@@ -60,23 +61,24 @@ class GrowingTrainer(BaseTrainer):
                 *shape, n_neurons = s
 
                 selected = torch.stack(
-                    [torch.randperm(n_neurons)[: hparams["num_kept_neurons"]] for _ in range(s.numel() // n_neurons)]
+                    [torch.randperm(n_neurons)[: phase.num_kept_neurons(m)] for _ in range(s.numel() // n_neurons)]
                 )
 
                 selected = selected.reshape(*shape, -1)
 
                 m.degrow(selected)
                 if tensorboard_writer is not None and selected.numel():
-                    tensorboard_writer.add_histogram(f"selected neurons/{m.__class__.__name__}", selected, growth_phase)
+                    tensorboard_writer.add_histogram(f"selected neurons/{m.__class__.__name__}", selected, phase.index)
 
-    def train(
+        # apply config update
+        self.model.config.update(phase.config_update)
+
+    def train(  # type: ignore[override]
         self,
         train_data,
-        *,
+        schedule: GrowthSchedule,
         learning_rate: float = 0.01,
         use_onecycle: bool = True,
-        num_epochs: int = 5,
-        growth_phases: int = 5,
         batch_size: int = 32,
         shuffle: bool = True,
         num_workers: Optional[int] = None,
@@ -92,21 +94,20 @@ class GrowingTrainer(BaseTrainer):
             log.info("Parameters:")
             log.info(f" - learning_rate: {learning_rate}")
             log.info(f" - use_onecycle: {use_onecycle}")
-            log.info(f" - epochs per growth phase: {num_epochs}")
-            log.info(f" - growth phases: {growth_phases}")
+            log.info(f" - growth phases: {len(schedule)}")
             log_line(log)
 
         epoch = 0
 
-        for growth_phase in range(growth_phases + 1):
-            if growth_phase > 0:
-                self.grow_model(self, growth_phase, tensorboard_writer=tensorboard_writer)
+        for phase in schedule:
+            if not phase.is_initial:
+                self.grow_model(self, phase, tensorboard_writer=tensorboard_writer)
 
             train_info = super().train(
                 train_data=train_data,
                 learning_rate=learning_rate,
                 use_onecycle=use_onecycle,
-                num_epochs=num_epochs,
+                num_epochs=phase.epochs,
                 batch_size=batch_size,
                 shuffle=shuffle,
                 num_workers=num_workers,
@@ -114,11 +115,12 @@ class GrowingTrainer(BaseTrainer):
                 tensorboard_writer=tensorboard_writer,
                 log_training_info=False,
                 start_epoch=epoch,
+                **kw,
             )
 
             epoch = train_info["epoch"]
 
-            log.info(f"growth phase {growth_phase+1} - {epoch} epochs - loss: {train_info['final_train_loss']}")
+            log.info(f"growth phase {phase.index} - {epoch} epochs - loss: {train_info['final_train_loss']}")
 
         return train_info
 

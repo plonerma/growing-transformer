@@ -97,9 +97,8 @@ class GrowingAttention(GrowingModule):
         else:
             return out, attention
 
-    def grow(self) -> torch.Size:
+    def grow(self, num_novel: int = 0, split: bool = False) -> torch.Size:
         step_size = self.config.step_size
-        num_novel = self.config.mha_num_novel
         eps_novel_weight = self.config.eps_novel_weight
         eps_novel_bias = self.config.eps_novel_bias
 
@@ -240,9 +239,8 @@ class ScaledDotProductAttention(GrowingModule):
 
         return torch.softmax(product, dim=-1)
 
-    def grow(self) -> torch.Size:
+    def grow(self, num_novel: int = 0, split: bool = False) -> torch.Size:
         step_size = self.config.step_size
-        num_novel = self.config.sdp_num_novel
         eps_novel_weight = self.config.eps_novel_weight
         eps_novel_bias = self.config.eps_novel_bias
 

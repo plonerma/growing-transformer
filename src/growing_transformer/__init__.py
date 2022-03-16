@@ -1,9 +1,11 @@
 import logging
 import logging.config
 
+import torch
+
 from .configuration import GrowingConfig
 from .model import Growing, GrowingMLMTransformer, GrowingModule, GrowingTransformer
-from .trainer import BaseTrainer, GrowingTrainer
+from .trainer import BaseTrainer, GrowingTrainer, GrowthSchedule
 
 logging.config.dictConfig(
     {
@@ -25,6 +27,12 @@ logging.config.dictConfig(
 logger = logging.getLogger("growing_transformer")
 
 
+if torch.cuda.is_available():
+    device = torch.device("cuda:0")
+else:
+    device = torch.device("cpu")
+
+
 __all__ = [
     "Growing",
     "GrowingModule",
@@ -33,4 +41,5 @@ __all__ = [
     "GrowingMLMTransformer",
     "BaseTrainer",
     "GrowingTrainer",
+    "GrowthSchedule",
 ]

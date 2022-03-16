@@ -41,15 +41,18 @@ class GrowingConfig(BertConfig):
     ):
         super().__init__(*args, **kwargs)
 
+        # actual architecture
         self.layer_norm_eps = layer_norm_eps
         self.num_hidden_layers = num_hidden_layers
+
         self.d_head = d_head
         self.d_model = d_model
         self.num_heads = num_heads
-        self.step_size = step_size
-        self.layer_step_size = first_not_none(layer_step_size, step_size)
         self.bert_like_state_dict = bert_like_state_dict
 
+        # growth specific args
+        self.step_size = step_size
+        self.layer_step_size = first_not_none(layer_step_size, step_size)
         self.mlp_split = first_not_none(mlp_split, split)
 
         # number of neurons that are introduced

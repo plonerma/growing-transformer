@@ -19,7 +19,6 @@ class BaseTrainer:
     def train(
         self,
         train_data,
-        *,
         learning_rate: float = 0.01,
         use_onecycle: bool = True,
         num_epochs: int = 5,

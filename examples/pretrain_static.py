@@ -2,7 +2,12 @@ import datasets
 from datasets import DatasetDict
 from transformers import BertTokenizer
 
-from growing_transformer import BaseTrainer, GrowingConfig, GrowingMLMTransformer
+from growing_transformer import (
+    BaseTrainer,
+    GrowingConfig,
+    GrowingMLMTransformer,
+    GrowthSchedule,
+)
 from growing_transformer.data import MLMSegmenetDataset
 
 corpus = datasets.load_dataset("wikitext", "wikitext-2-raw-v1")
@@ -19,4 +24,4 @@ model = GrowingMLMTransformer(config)
 
 trainer = BaseTrainer(model)
 
-trainer.train(train_data, growth_phases=0, epochs=10)
+trainer.train(train_data, schedule=GrowthSchedule(10))

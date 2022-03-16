@@ -49,7 +49,7 @@ class Growing(torch.nn.Module):
     def degrow(self, selected: torch.Tensor) -> None:
         pass
 
-    def grow(self) -> torch.Size:
+    def grow(self, num_novel: int = 0, split: bool = False) -> torch.Size:
         return torch.Size()
 
     def select(self, k: int) -> torch.Tensor:
@@ -90,7 +90,7 @@ class GrowingModule(Growing):
         pass
 
     @abstractmethod
-    def grow(self) -> torch.Size:
+    def grow(self, num_novel: int = 0, split: bool = False) -> torch.Size:
         pass
 
     @abstractmethod

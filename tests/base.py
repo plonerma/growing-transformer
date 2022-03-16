@@ -28,16 +28,16 @@ class GrowingTest:
     model_class: Optional[Type[Growing]] = None
 
     growth_params = [
-        dict(split=False, num_novel=4, eps_novel=1, step_size=1e-5),
-        dict(split=False, num_novel=4, eps_novel=1e-5, step_size=1),
+        dict(kw=dict(split=False, num_novel=4), config=dict(eps_novel=1, step_size=1e-5)),
+        dict(kw=dict(split=False, num_novel=4), config=dict(eps_novel=1e-5, step_size=1)),
     ]
 
     degrowth_params = [
-        dict(split=True, num_novel=4, eps_split=0.1, eps_novel=0.2, step_size=0.3),
-        dict(split=False, num_novel=4, eps_split=0.1, eps_novel=0.2, step_size=0.3),
-        dict(split=True, num_novel=0, eps_split=0.1, eps_novel=0.2, step_size=0.3),
-        dict(split=False, num_novel=0, eps_split=0.1, eps_novel=0.2, step_size=0.3),
-        dict(split=True, num_novel=4, eps_split=0.1, eps_novel=0.2, step_size=1.0),
+        dict(kw=dict(split=True, num_novel=4), config=dict(eps_split=0.1, eps_novel=0.2, step_size=0.3)),
+        dict(kw=dict(split=False, num_novel=4), config=dict(eps_split=0.1, eps_novel=0.2, step_size=0.3)),
+        dict(kw=dict(split=True, num_novel=0), config=dict(eps_split=0.1, eps_novel=0.2, step_size=0.3)),
+        dict(kw=dict(split=False, num_novel=0), config=dict(eps_split=0.1, eps_novel=0.2, step_size=0.3)),
+        dict(kw=dict(split=True, num_novel=4), config=dict(eps_split=0.1, eps_novel=0.2, step_size=1.0)),
     ]
 
     def random_batch(self, size=None):
@@ -78,9 +78,11 @@ class GrowingTest:
         changed only a litte bit.
         """
 
+        config, kw = params["config"], params["kw"]
+
         torch.manual_seed(0)
 
-        model = self.new_model(params)
+        model = self.new_model(config)
 
         model.eval()
 
@@ -89,10 +91,10 @@ class GrowingTest:
         y_a = model(x)
 
         if isinstance(model, GrowingModule):
-            model.grow()
+            model.grow(**kw)
         else:
             for m in model.growing_modules():
-                m.grow()
+                m.grow(**kw)
 
         y_b = model(x)
 
@@ -110,7 +112,9 @@ class GrowingTest:
         """
         torch.manual_seed(0)
 
-        model = self.new_model(params)
+        config, kw = params["config"], params["kw"]
+
+        model = self.new_model(config)
 
         model.eval()
 
@@ -120,11 +124,11 @@ class GrowingTest:
 
         if isinstance(model, GrowingModule):
             # grow only the module itself
-            model.grow()
+            model.grow(**kw)
         else:
             # test for composite growth
             for m in model.growing_modules():
-                m.grow()
+                m.grow(**kw)
 
         y_b = model(x)
 
@@ -142,8 +146,9 @@ class GrowingTest:
         """
 
         torch.manual_seed(0)
+        config, kw = params["config"], params["kw"]
 
-        model = self.new_model(params)
+        model = self.new_model(config)
 
         model.eval()
 
@@ -155,7 +160,7 @@ class GrowingTest:
         else:
             modules = list(model.growing_modules())
 
-        sizes: List[torch.Size] = [m.grow() for m in modules]
+        sizes: List[torch.Size] = [m.grow(**kw) for m in modules]
 
         y_a = model(x)
 
@@ -180,7 +185,9 @@ class GrowingTest:
         """
         torch.manual_seed(0)
 
-        model = self.new_model(params)
+        config, kw = params["config"], params["kw"]
+
+        model = self.new_model(config)
 
         model.eval()
 
@@ -194,7 +201,7 @@ class GrowingTest:
         else:
             modules = list(model.growing_modules())
 
-        sizes: List[torch.Size] = [m.grow() for m in modules]
+        sizes: List[torch.Size] = [m.grow(**kw) for m in modules]
 
         # degrow deleting all recently grown neurons
         for m, size in zip(modules, sizes):
@@ -211,10 +218,10 @@ class GrowingTest:
 
 class SplittingTest(GrowingTest):
     growth_params = [
-        dict(split=True, num_novel=4, eps_split=1, eps_novel=1, step_size=1e-5),
-        dict(split=False, num_novel=4, eps_split=1, eps_novel=1e-7, step_size=1),
-        dict(split=True, num_novel=0, eps_split=1e-4, eps_novel=1, step_size=1),
-        dict(split=True, num_novel=4, eps_split=1e-4, eps_novel=1e-4, step_size=1),
+        dict(kw=dict(split=True, num_novel=4), config=dict(eps_split=1, eps_novel=1, step_size=1e-5)),
+        dict(kw=dict(split=False, num_novel=4), config=dict(eps_split=1, eps_novel=1e-7, step_size=1)),
+        dict(kw=dict(split=True, num_novel=0), config=dict(eps_split=1e-4, eps_novel=1, step_size=1)),
+        dict(kw=dict(split=True, num_novel=4), config=dict(eps_split=1e-4, eps_novel=1e-4, step_size=1)),
     ]
 
     @pytest.mark.parametrize("params", growth_params)
@@ -223,9 +230,11 @@ class SplittingTest(GrowingTest):
         changed only a litte bit.
         """
 
+        config, kw = params["config"], params["kw"]
+
         torch.manual_seed(0)
 
-        model = self.new_model(params)
+        model = self.new_model(config)
 
         model.eval()
 
@@ -234,10 +243,10 @@ class SplittingTest(GrowingTest):
         y_a = model(x)
 
         if isinstance(model, GrowingModule):
-            model.grow()
+            model.grow(**kw)
         else:
             for m in model.growing_modules():
-                m.grow()
+                m.grow(**kw)
 
         y_b = model(x)
 
