@@ -3,10 +3,6 @@ import logging.config
 
 import torch
 
-from .configuration import GrowingConfig
-from .model import Growing, GrowingMLMTransformer, GrowingModule, GrowingTransformer
-from .trainer import BaseTrainer, GrowingTrainer, GrowthSchedule
-
 logging.config.dictConfig(
     {
         "version": 1,
@@ -32,6 +28,14 @@ if torch.cuda.is_available():
 else:
     device = torch.device("cpu")
 
+from .configuration import GrowingConfig  # noqa: E402 import after setting device
+from .model import (
+    Growing,
+    GrowingMLMTransformer,
+    GrowingModule,
+    GrowingTransformer,
+)  # noqa: E402 import after setting device
+from .trainer import BaseTrainer, GrowingTrainer, GrowthSchedule  # noqa: E402 import after setting device
 
 __all__ = [
     "Growing",

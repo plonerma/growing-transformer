@@ -1,3 +1,4 @@
+import random
 from itertools import product
 from typing import Any, Iterator, Mapping
 
@@ -19,3 +20,17 @@ class GridSearch:
         for v in self.grid.values():
             _len *= len(v)
         return _len
+
+
+def subsample(data, proportion=0.1):
+    """Subsample dataset."""
+    n_samples = len(data)
+    indices = list(range(n_samples))
+    random.shuffle(indices)
+
+    # calculate new number of samples
+    n_samples = round(proportion * n_samples)
+
+    # create new dataset
+    subset = indices[:n_samples]
+    return Subset(data, subset)

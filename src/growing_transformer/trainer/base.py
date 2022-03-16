@@ -7,6 +7,7 @@ import torch
 from torch.optim.lr_scheduler import OneCycleLR  # type: ignore
 from torch.utils.data import DataLoader
 
+from .. import device
 from .util import log_line
 
 log = logging.getLogger("growing_transformer")
@@ -19,6 +20,7 @@ class BaseTrainer:
     def train(
         self,
         train_data,
+        test_data=None,
         learning_rate: float = 0.01,
         use_onecycle: bool = True,
         num_epochs: int = 5,
@@ -32,6 +34,9 @@ class BaseTrainer:
         start_epoch=0,
         **kw,
     ):
+
+        self.model.to(device)
+        train_data.to(device)
 
         if log_training_info:
             log.info(f"Model: {self.model}")
@@ -53,7 +58,11 @@ class BaseTrainer:
             else:
                 scheduler = None
 
+            model.train()
+
             for epoch in range(start_epoch, start_epoch + num_epochs):
+                log.info(f"Epoch #{epoch:.02}")
+
                 batch_loader = DataLoader(
                     train_data,
                     batch_size=batch_size,
@@ -87,6 +96,14 @@ class BaseTrainer:
                         "training/model size", sum(p.numel() for p in self.model.parameters()), epoch
                     )
 
+                log.info(f"Train loss: {loss:.4}")
+                if test_data:
+                    eval_results = self.evaluate(test_data)
+                    tensorboard_writer.add_scalar("training/eval_loss", eval_results["eval_loss"], epoch)
+                    tensorboard_writer.add_scalar("training/eval_accuracy", eval_results["accuracy"], epoch)
+                    log.info(f"Eval loss: {eval_results['eval_loss']:.4}")
+                    log.info(f"Eval accuracy: {eval_results['accuracy']:.4}")
+
         except KeyboardInterrupt:
             log_line(log)
             log.warning("Exiting from training early.")
@@ -94,4 +111,17 @@ class BaseTrainer:
             if propagate_interrupt:
                 raise KeyboardInterrupt
 
-        return dict(final_train_loss=loss, epoch=epoch)
+        results = dict(final_train_loss=loss, epoch=epoch)
+
+        if test_data:
+            results.update(eval_results)
+
+        return results
+
+    def evaluate(self, data, batch_size=32):
+        self.model.eval()
+
+        data.to(device)
+        self.model.to(device)
+
+        return self.model.evaluate(data, batch_size=batch_size)

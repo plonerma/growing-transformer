@@ -77,6 +77,7 @@ class GrowingTrainer(BaseTrainer):
         self,
         train_data,
         schedule: GrowthSchedule,
+        test_data=None,
         learning_rate: float = 0.01,
         use_onecycle: bool = True,
         batch_size: int = 32,
@@ -105,6 +106,7 @@ class GrowingTrainer(BaseTrainer):
 
             train_info = super().train(
                 train_data=train_data,
+                test_data=test_data,
                 learning_rate=learning_rate,
                 use_onecycle=use_onecycle,
                 num_epochs=phase.epochs,

@@ -73,3 +73,38 @@ class GrowingMLMTransformer(Growing):
         masked_lm_loss = self.criterion(prediction_scores.view(-1, self.config.vocab_size), labels.view(-1))
 
         return masked_lm_loss
+
+    def evaluate(self, data, batch_size=32, num_workers=None):
+        batch_loader = DataLoader(
+            data,
+            batch_size=batch_size,
+            shuffle=False,
+            num_workers=0 if num_workers is None else num_workers,
+        )
+
+        total_samples = 0
+        correct = 0
+        loss = 0.0
+
+        for batch in batch_loader:
+            prediction_scores = self(batch["input_masked"], attention_mask=batch["attention_mask"])
+            num_classes = prediction_scores.size(-1)
+
+            prediction_scores = torch.masked_select(prediction_scores, batch["mlm_mask"][..., None]).view(
+                -1, num_classes
+            )
+            predicted = prediction_scores.argmax(-1)
+
+            # select relevant labels
+            labels = torch.masked_select(batch["input_ids"], batch["mlm_mask"])
+
+            loss += self.criterion(prediction_scores.view(-1, self.config.vocab_size), labels.view(-1))
+
+            correct += (predicted == labels).sum()
+
+            total_samples += labels.size(0)
+
+        return dict(
+            accuracy=correct / total_samples,
+            eval_loss=loss / total_samples,
+        )
