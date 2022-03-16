@@ -58,7 +58,7 @@ class BaseTrainer:
             else:
                 scheduler = None
 
-            model.train()
+            self.model.train()
 
             for epoch in range(start_epoch, start_epoch + num_epochs):
                 log.info(f"Epoch #{epoch:.02}")

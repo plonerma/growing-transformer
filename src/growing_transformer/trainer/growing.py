@@ -1,4 +1,5 @@
 import logging
+import time
 from contextlib import contextmanager
 from typing import Optional
 
@@ -102,8 +103,14 @@ class GrowingTrainer(BaseTrainer):
 
         for phase in schedule:
             if not phase.is_initial:
+                grow_start = time.time()
                 self.grow_model(self, phase, tensorboard_writer=tensorboard_writer)
+                grow_end = time.time()
 
+                if tensorboard_writer is not None:
+                    tensorboard_writer.add_scalar("training/growth time", grow_end - grow_start, epoch)
+
+            train_start = time.time()
             train_info = super().train(
                 train_data=train_data,
                 test_data=test_data,
@@ -119,6 +126,10 @@ class GrowingTrainer(BaseTrainer):
                 start_epoch=epoch,
                 **kw,
             )
+            train_end = time.time()
+
+            if tensorboard_writer is not None:
+                tensorboard_writer.add_scalar("training/training time", train_end - train_start, epoch)
 
             epoch = train_info["epoch"]
 

@@ -2,6 +2,7 @@ from typing import Mapping, Optional
 
 import torch
 from torch import BoolTensor, Tensor
+from torch.utils.data import DataLoader
 from transformers.models.bert.modeling_bert import (
     BertEmbeddings,
     BertOnlyMLMHead,

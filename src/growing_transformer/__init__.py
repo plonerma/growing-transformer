@@ -29,13 +29,17 @@ else:
     device = torch.device("cpu")
 
 from .configuration import GrowingConfig  # noqa: E402 import after setting device
-from .model import (
+from .model import (  # noqa: E402 import after setting device
     Growing,
     GrowingMLMTransformer,
     GrowingModule,
     GrowingTransformer,
-)  # noqa: E402 import after setting device
-from .trainer import BaseTrainer, GrowingTrainer, GrowthSchedule  # noqa: E402 import after setting device
+)
+from .trainer import (  # noqa: E402 import after setting device
+    BaseTrainer,
+    GrowingTrainer,
+    GrowthSchedule,
+)
 
 __all__ = [
     "Growing",

@@ -2,6 +2,8 @@ import random
 from itertools import product
 from typing import Any, Iterator, Mapping
 
+from torch.utils.data.dataset import Subset
+
 
 def log_line(log):
     log.info("-" * 100)
