@@ -1,39 +1,37 @@
+import random
+
 import torch
 from torch.utils.data import Dataset
+from torch.utils.data.dataset import Subset
+from tqdm import tqdm
+
+from .. import logger as log
 
 
 class SegmentDataset(Dataset):
-    def __init__(self, corpus, tokenizer, max_length=512):
-        self.corpus = corpus
+    def __init__(self, data, tokenizer, max_length=512):
         self.max_length = max_length
         self.tokenizer = tokenizer
-
-    def __len__(self):
-        return len(self.corpus)
+        self.segments = list(self.create_token_segments(data))
 
     def __getitem__(self, i):
-        # reserve two tokens for start- and end-of-sequence tokens
-        remaining_length = self.max_length - 2
-        tokens = []
+        return self.segments[i]
 
-        # add new sentences until maximum length has been reached
-        while remaining_length > 0:
-            new_tokens = self.tokenizer.tokenize(self.corpus[i]["text"])
+    def __len__(self):
+        return len(self.segments)
 
-            # if new tokens within budget
-            if len(new_tokens) <= remaining_length:
+    def downsampled(self, proportion):
+        """Subsample dataset."""
+        n_samples = len(self)
+        indices = list(range(n_samples))
+        random.shuffle(indices)
 
-                # add tokens
-                tokens += new_tokens
+        # calculate new number of samples
+        n_samples = round(proportion * n_samples)
+        # create new dataset
+        return Subset(self, indices[:n_samples])
 
-                # remove tokens from budget
-                remaining_length -= len(new_tokens)
-
-                # move to next sentence (if at end, start at beginning)
-                i = (i + 1) % len(self.corpus)
-            else:
-                break
-
+    def prepare_tokens(self, tokens):
         return self.tokenizer.prepare_for_model(
             ids=self.tokenizer.convert_tokens_to_ids(tokens),
             max_length=512,
@@ -41,6 +39,38 @@ class SegmentDataset(Dataset):
             return_tensors="pt",
             return_special_tokens_mask=True,
         )
+
+    def create_token_segments(
+        self,
+        data,
+    ):
+
+        log.info("Preparing SegmentDataset")
+
+        # reserve two tokens for start- and end-of-sequence tokens
+        remaining_length = self.max_length - 2
+        tokens = []
+
+        for segment in tqdm(data):
+            new_tokens = self.tokenizer.tokenize(segment["text"])
+
+            # if not enough remaining budget
+            if not len(new_tokens) <= remaining_length:
+                # yield full segment
+                yield self.prepare_tokens(tokens)
+
+                # reset new segment
+                remaining_length = self.max_length - 2
+                tokens = []
+
+            # add tokens
+            tokens += new_tokens
+
+            # reduce budget by number of tokens
+            remaining_length -= len(new_tokens)
+
+        if len(tokens) > 0:  # a new segment was started
+            yield self.prepare_tokens(tokens)
 
 
 class MLMSegmenetDataset(SegmentDataset):
