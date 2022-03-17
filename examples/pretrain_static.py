@@ -1,3 +1,6 @@
+import logging
+from pathlib import Path
+
 import datasets
 import torch
 from datasets import DatasetDict
@@ -10,7 +13,15 @@ from growing_transformer import (
     GrowthSchedule,
 )
 from growing_transformer.data import MLMSegmenetDataset
-from growing_transformer.trainer.util import subsample
+from growing_transformer.trainer.util import add_file_handler
+
+base_path = Path("pretrained_static")
+base_path.mkdir(exist_ok=True, parents=True)
+
+log = logging.getLogger("growing_transformer")
+
+log_handler = add_file_handler(log, base_path / "training.log")
+
 
 corpus = datasets.load_dataset("wikitext", "wikitext-2-raw-v1")
 
@@ -18,8 +29,7 @@ assert isinstance(corpus, DatasetDict)
 
 tokenizer = BertTokenizer.from_pretrained("./models/tokenizer/bert-base-cased")
 
-train_data = MLMSegmenetDataset(corpus["train"], tokenizer)
-train_data = subsample(train_data, 0.1)
+train_data = MLMSegmenetDataset(corpus["train"], tokenizer).downsampled(0.1)
 test_data = MLMSegmenetDataset(corpus["test"], tokenizer)
 
 config = GrowingConfig()
@@ -30,4 +40,4 @@ trainer = BaseTrainer(model)
 
 trainer.train(train_data, schedule=GrowthSchedule(10), test_data=test_data)
 
-torch.save(model.state_dict(), "trained_model.pt")
+torch.save(model.state_dict(), base_path / "trained_model.pt")
