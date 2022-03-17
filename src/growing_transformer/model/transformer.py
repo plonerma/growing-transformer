@@ -1,3 +1,4 @@
+import math
 from typing import Mapping, Optional
 
 import torch
@@ -105,7 +106,15 @@ class GrowingMLMTransformer(Growing):
 
             total_samples += labels.size(0)
 
+        eval_loss = loss / total_samples
+
+        try:
+            perplexity = math.exp(eval_loss)
+        except OverflowError:
+            perplexity = float("inf")
+
         return dict(
             accuracy=correct / total_samples,
-            eval_loss=loss / total_samples,
+            eval_loss=eval_loss,
+            perplexity=perplexity,
         )
