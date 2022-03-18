@@ -7,16 +7,14 @@ from datasets import DatasetDict
 from transformers import BertTokenizer
 
 from growing_transformer import (
-    BaseTrainer,
     GrowingConfig,
     GrowingMLMTransformer,
+    GrowingTrainer,
     GrowthSchedule,
 )
-
-
 from growing_transformer.data import MLMSegmenetDataset
+from growing_transformer.model import GrowingMLP as MLP
 from growing_transformer.trainer.util import add_file_handler
-
 
 base_path = Path("results/pretrained_growing")
 base_path.mkdir(exist_ok=True, parents=True)

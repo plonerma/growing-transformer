@@ -65,3 +65,8 @@ class GrowingConfig(BertConfig):
         self.eps_split_bias = first_not_none(eps_split_bias, eps_split)
         self.eps_novel_weight = first_not_none(eps_novel_weight, eps_novel)
         self.eps_novel_bias = first_not_none(eps_novel_bias, eps_novel)
+
+
+class GrowingConfigFull(GrowingConfig):
+    def __init__(self, *args, **kwargs):
+        super().__init__(num_hidden_layers=12, *args, **kwargs)

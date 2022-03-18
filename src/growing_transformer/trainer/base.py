@@ -36,7 +36,6 @@ class BaseTrainer:
     ):
 
         self.model.to(device)
-        train_data.to(device)
 
         if log_training_info:
             log.info(f"Model: {self.model}")
@@ -49,7 +48,7 @@ class BaseTrainer:
         use_tensorboard = tensorboard_writer is not None
 
         try:
-            optimizer = torch.optim.Adam(self.model.parameters(), lr=learning_rate)
+            optimizer = torch.optim.Adam(self.model.parameters(), lr=learning_rate, **kw)
 
             if use_onecycle:
                 num_batches = len(train_data) // batch_size + 1
@@ -61,7 +60,7 @@ class BaseTrainer:
             self.model.train()
 
             for epoch in range(start_epoch, start_epoch + num_epochs):
-                log.info(f"Epoch #{epoch:.02}")
+                log.info(f"Epoch #{epoch:02}")
 
                 batch_loader = DataLoader(
                     train_data,
@@ -98,11 +97,12 @@ class BaseTrainer:
 
                 log.info(f"Train loss: {loss:.4}")
                 if test_data:
-                    eval_results = self.evaluate(test_data)
-                    tensorboard_writer.add_scalar("training/eval_loss", eval_results["eval_loss"], epoch)
-                    tensorboard_writer.add_scalar("training/eval_accuracy", eval_results["accuracy"], epoch)
+                    eval_results = self.evaluate(test_data, batch_size=batch_size)
                     log.info(f"Eval loss: {eval_results['eval_loss']:.4}")
                     log.info(f"Eval accuracy: {eval_results['accuracy']:.4}")
+                    if use_tensorboard:
+                        tensorboard_writer.add_scalar("training/eval_loss", eval_results["eval_loss"], epoch)
+                        tensorboard_writer.add_scalar("training/eval_accuracy", eval_results["accuracy"], epoch)
 
         except KeyboardInterrupt:
             log_line(log)
@@ -120,8 +120,7 @@ class BaseTrainer:
 
     def evaluate(self, data, batch_size=32):
         self.model.eval()
-
-        data.to(device)
         self.model.to(device)
 
-        return self.model.evaluate(data, batch_size=batch_size)
+        with torch.no_grad():
+            return self.model.evaluate(data, batch_size=batch_size)

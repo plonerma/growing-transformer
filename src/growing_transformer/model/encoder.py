@@ -1,7 +1,7 @@
 from typing import Optional
 
 import torch
-from torch import BoolTensor, Tensor
+from torch import Tensor
 from torch.nn import ModuleList, Parameter
 from torch.nn.init import uniform_
 
@@ -23,7 +23,7 @@ class GrowingEncoder(GrowingModule):
 
         self._new_layers: ModuleList = ModuleList()
 
-    def forward(self, x: Tensor, attention_mask: Optional[BoolTensor] = None):
+    def forward(self, x: Tensor, attention_mask: Optional[Tensor] = None):
         for i, layer in enumerate(self.layer):
             x = layer(x, attention_mask=attention_mask)
 

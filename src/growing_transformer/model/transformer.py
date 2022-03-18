@@ -2,13 +2,15 @@ import math
 from typing import Mapping, Optional
 
 import torch
-from torch import BoolTensor, Tensor
+from torch import Tensor
 from torch.utils.data import DataLoader
 from transformers.models.bert.modeling_bert import (
     BertEmbeddings,
     BertOnlyMLMHead,
     BertPooler,
 )
+
+import growing_transformer
 
 from ..configuration import GrowingConfig
 from .base import Growing
@@ -30,7 +32,7 @@ class GrowingTransformer(Growing):
     def set_input_embeddings(self, value):
         self.embeddings.word_embeddings = value
 
-    def forward(self, input_ids: Tensor, attention_mask: Optional[BoolTensor] = None):
+    def forward(self, input_ids: Tensor, attention_mask: Optional[Tensor] = None):
 
         embeded = self.embeddings(
             input_ids=input_ids,
@@ -57,20 +59,24 @@ class GrowingMLMTransformer(Growing):
 
         self.criterion = torch.nn.CrossEntropyLoss()
 
-    def forward(
-        self, inputs: Tensor, attention_mask: Optional[BoolTensor] = None, mlm_mask: Optional[BoolTensor] = None
-    ):
+    def forward(self, inputs: Tensor, attention_mask: Optional[Tensor] = None, mlm_mask: Optional[Tensor] = None):
+        inputs.to(growing_transformer.device)
         return self.cls(self.bert(inputs, attention_mask=attention_mask))
 
     def forward_loss(self, batch: Mapping[str, Tensor]):
-        prediction_scores = self(batch["input_masked"], attention_mask=batch["attention_mask"])
+        masked_input = batch["input_masked"].to(growing_transformer.device)
+        attention_mask = batch["attention_mask"].to(growing_transformer.device)
+        mlm_mask = batch["mlm_mask"].to(growing_transformer.device)
+        input_ids = batch["input_ids"].to(growing_transformer.device)
+
+        prediction_scores = self(masked_input, attention_mask=attention_mask)
 
         num_classes = prediction_scores.size(-1)
 
-        prediction_scores = torch.masked_select(prediction_scores, batch["mlm_mask"][..., None]).view(-1, num_classes)
+        prediction_scores = torch.masked_select(prediction_scores, mlm_mask[..., None]).view(-1, num_classes)
 
         # select relevant labels
-        labels = torch.masked_select(batch["input_ids"], batch["mlm_mask"])
+        labels = torch.masked_select(input_ids, mlm_mask)
 
         masked_lm_loss = self.criterion(prediction_scores.view(-1, self.config.vocab_size), labels.view(-1))
 
@@ -89,16 +95,19 @@ class GrowingMLMTransformer(Growing):
         loss = 0.0
 
         for batch in batch_loader:
-            prediction_scores = self(batch["input_masked"], attention_mask=batch["attention_mask"])
+            masked_input = batch["input_masked"].to(growing_transformer.device)
+            attention_mask = batch["attention_mask"].to(growing_transformer.device)
+            mlm_mask = batch["mlm_mask"].to(growing_transformer.device)
+            input_ids = batch["input_ids"].to(growing_transformer.device)
+
+            prediction_scores = self(masked_input, attention_mask)
             num_classes = prediction_scores.size(-1)
 
-            prediction_scores = torch.masked_select(prediction_scores, batch["mlm_mask"][..., None]).view(
-                -1, num_classes
-            )
+            prediction_scores = torch.masked_select(prediction_scores, mlm_mask[..., None]).view(-1, num_classes)
             predicted = prediction_scores.argmax(-1)
 
             # select relevant labels
-            labels = torch.masked_select(batch["input_ids"], batch["mlm_mask"])
+            labels = torch.masked_select(input_ids, mlm_mask)
 
             loss += self.criterion(prediction_scores.view(-1, self.config.vocab_size), labels.view(-1))
 

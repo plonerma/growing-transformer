@@ -38,6 +38,7 @@ class SegmentDataset(Dataset):
             padding="max_length",
             return_tensors="pt",
             return_special_tokens_mask=True,
+            truncation=True,
         )
 
     def create_token_segments(
@@ -48,19 +49,20 @@ class SegmentDataset(Dataset):
         log.info("Preparing SegmentDataset")
 
         # reserve two tokens for start- and end-of-sequence tokens
-        remaining_length = self.max_length - 2
+        max_tokens = self.max_length - 2
+        remaining_length = max_tokens
         tokens = []
 
         for segment in tqdm(data):
             new_tokens = self.tokenizer.tokenize(segment["text"])
 
             # if not enough remaining budget
-            if not len(new_tokens) <= remaining_length:
+            if len(new_tokens) > remaining_length:
                 # yield full segment
                 yield self.prepare_tokens(tokens)
 
                 # reset new segment
-                remaining_length = self.max_length - 2
+                remaining_length = max_tokens
                 tokens = []
 
             # add tokens
