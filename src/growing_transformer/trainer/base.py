@@ -1,5 +1,5 @@
 import logging
-from typing import Optional
+from typing import Optional, Tuple
 
 import torch
 
@@ -21,7 +21,10 @@ class BaseTrainer:
         self,
         train_data,
         test_data=None,
-        learning_rate: float = 0.01,
+        max_lr: float = 6e-4,
+        betas: Tuple[float, float] = (0.9, 0.98),
+        eps: float = 1e-06,
+        weight_decay: float = 0.01,
         use_onecycle: bool = True,
         num_epochs: int = 5,
         growth_phases: int = 5,
@@ -41,19 +44,31 @@ class BaseTrainer:
             log.info(f"Model: {self.model}")
             log_line(log)
             log.info("Parameters:")
-            log.info(f" - learning_rate: {learning_rate}")
+            log.info(f" - max_lr: {max_lr}")
             log.info(f" - use_onecycle: {use_onecycle}")
             log_line(log)
 
         use_tensorboard = tensorboard_writer is not None
 
         try:
-            optimizer = torch.optim.Adam(self.model.parameters(), lr=learning_rate, **kw)
+            optimizer = torch.optim.Adam(
+                self.model.parameters(),
+                lr=max_lr,
+                betas=betas,
+                eps=eps,
+                weight_decay=weight_decay,
+                **kw)
 
             if use_onecycle:
                 num_batches = len(train_data) // batch_size + 1
 
-                scheduler = OneCycleLR(optimizer, steps_per_epoch=num_batches, epochs=num_epochs, max_lr=learning_rate)
+                scheduler = OneCycleLR(
+                    optimizer,
+                    steps_per_epoch=num_batches,
+                    pct_start=0.1,
+                    epochs=num_epochs,
+                    max_lr=max_lr
+                )
             else:
                 scheduler = None
 
@@ -71,7 +86,8 @@ class BaseTrainer:
 
                 loss_sum = 0
 
-                for batch in batch_loader:
+
+                for i, batch in enumerate(batch_loader):
                     optimizer.zero_grad()
                     loss = self.model.forward_loss(batch)
                     loss.backward()
@@ -82,17 +98,25 @@ class BaseTrainer:
 
                     loss_sum += loss.data
 
-                loss = loss_sum / len(batch_loader)
+                    global_step = epoch*len(batch_loader) + i
+
+                    if i % 1000 == 0 and use_tensorboard:
+                        tensorboard_writer.add_scalar(
+                            "loss/train_batchwise",
+                            loss_sum / (i + 1),
+                            global_step)
+
+                loss = loss_sum / i
 
                 if use_tensorboard:
                     lr = 0.0
                     for group in optimizer.param_groups:
                         lr = group["lr"]
 
-                    tensorboard_writer.add_scalar("training/learning rate", lr, epoch)
-                    tensorboard_writer.add_scalar("training/train loss", loss, epoch)
+                    tensorboard_writer.add_scalar("learning rate", lr, global_step)
+                    tensorboard_writer.add_scalar("loss/train_epoch_avg", loss, global_step)
                     tensorboard_writer.add_scalar(
-                        "training/model size", sum(p.numel() for p in self.model.parameters()), epoch
+                        "training/model size", sum(p.numel() for p in self.model.parameters()), global_step
                     )
 
                 log.info(f"Train loss: {loss:.4}")
@@ -101,8 +125,8 @@ class BaseTrainer:
                     log.info(f"Eval loss: {eval_results['eval_loss']:.4}")
                     log.info(f"Eval accuracy: {eval_results['accuracy']:.4}")
                     if use_tensorboard:
-                        tensorboard_writer.add_scalar("training/eval_loss", eval_results["eval_loss"], epoch)
-                        tensorboard_writer.add_scalar("training/eval_accuracy", eval_results["accuracy"], epoch)
+                        tensorboard_writer.add_scalar("loss/evaluation", eval_results["eval_loss"], global_step)
+                        tensorboard_writer.add_scalar("accuracy", eval_results["accuracy"], global_step)
 
         except KeyboardInterrupt:
             log_line(log)

@@ -40,6 +40,6 @@ tensorboard_writer = SummaryWriter(base_path / "run")
 
 trainer = BaseTrainer(model)
 
-trainer.train(train_data, num_epochs=12, test_data=test_data, tensorboard_writer=tensorboard_writer)
+trainer.train(train_data, num_epochs=24, test_data=test_data, tensorboard_writer=tensorboard_writer, batch_size=16)
 
 torch.save(model.state_dict(), base_path / "trained_model.pt")

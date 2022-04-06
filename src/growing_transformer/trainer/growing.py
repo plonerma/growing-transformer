@@ -108,7 +108,7 @@ class GrowingTrainer(BaseTrainer):
                 grow_end = time.time()
 
                 if tensorboard_writer is not None:
-                    tensorboard_writer.add_scalar("training/growth time", grow_end - grow_start, epoch)
+                    tensorboard_writer.add_scalar("time/growth", grow_end - grow_start, epoch)
 
             train_start = time.time()
             train_info = super().train(
@@ -129,7 +129,7 @@ class GrowingTrainer(BaseTrainer):
             train_end = time.time()
 
             if tensorboard_writer is not None:
-                tensorboard_writer.add_scalar("training/training time", train_end - train_start, epoch)
+                tensorboard_writer.add_scalar("time/training", train_end - train_start, epoch)
 
             epoch = train_info["epoch"]
 
