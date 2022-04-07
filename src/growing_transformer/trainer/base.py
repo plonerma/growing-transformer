@@ -25,7 +25,7 @@ class BaseTrainer:
         betas: Tuple[float, float] = (0.9, 0.98),
         eps: float = 1e-06,
         weight_decay: float = 0.01,
-        gca_batches : int = 16,  # gradient accumulation batches
+        gca_batches: int = 16,  # gradient accumulation batches
         use_onecycle: bool = True,
         num_epochs: int = 5,
         growth_phases: int = 5,
@@ -53,22 +53,14 @@ class BaseTrainer:
 
         try:
             optimizer = torch.optim.Adam(
-                self.model.parameters(),
-                lr=max_lr,
-                betas=betas,
-                eps=eps,
-                weight_decay=weight_decay,
-                **kw)
+                self.model.parameters(), lr=max_lr, betas=betas, eps=eps, weight_decay=weight_decay, **kw
+            )
 
             if use_onecycle:
                 num_steps = len(train_data) // (batch_size * gca_batches) + 1
 
                 scheduler = OneCycleLR(
-                    optimizer,
-                    steps_per_epoch=num_steps,
-                    pct_start=0.1,
-                    epochs=num_epochs,
-                    max_lr=max_lr
+                    optimizer, steps_per_epoch=num_steps, pct_start=0.1, epochs=num_epochs, max_lr=max_lr
                 )
             else:
                 scheduler = None
@@ -91,17 +83,15 @@ class BaseTrainer:
                 optimizer.zero_grad()
                 for i, batch in enumerate(batch_loader):
 
-
                     loss = self.model.forward_loss(batch)
                     loss.backward()
 
                     loss_epoch_sum += loss.detach()
                     loss_gca_sum += loss.detach()
 
-                    global_step = (epoch*len(batch_loader) + i) / gca_batches
+                    global_step = (epoch * len(batch_loader) + i) / gca_batches
 
-
-                    if (i+1) % gca_batches == 0:
+                    if (i + 1) % gca_batches == 0:
 
                         optimizer.step()
 
@@ -111,17 +101,13 @@ class BaseTrainer:
                         optimizer.zero_grad()
 
                         tensorboard_writer.add_scalar(
-                            "loss/train_loss_accumulated",
-                            loss_gca_sum / gca_batches,
-                            global_step)
+                            "loss/train_loss_accumulated", loss_gca_sum / gca_batches, global_step
+                        )
 
                         loss_gca_sum = 0
 
                     if i % 1000 == 0 and use_tensorboard:
-                        tensorboard_writer.add_scalar(
-                            "loss/train_batchwise",
-                            loss_epoch_sum / (i + 1),
-                            global_step)
+                        tensorboard_writer.add_scalar("loss/train_batchwise", loss_epoch_sum / (i + 1), global_step)
 
                 loss = loss_epoch_sum / i
 
