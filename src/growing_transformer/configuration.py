@@ -37,6 +37,7 @@ class GrowingConfig(BertConfig):
         eps_split_bias: Optional[float] = None,
         eps_novel_weight: Optional[float] = None,
         eps_novel_bias: Optional[float] = None,
+        loss_on_all_tokens=True,
         **kwargs,
     ):
         super().__init__(*args, **kwargs)
@@ -49,6 +50,8 @@ class GrowingConfig(BertConfig):
         self.d_model = d_model
         self.num_heads = num_heads
         self.bert_like_state_dict = bert_like_state_dict
+
+        self.loss_on_all_tokens = loss_on_all_tokens
 
         # growth specific args
         self.step_size = step_size

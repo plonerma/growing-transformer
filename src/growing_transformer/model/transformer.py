@@ -73,10 +73,17 @@ class GrowingMLMTransformer(Growing):
 
         num_classes = prediction_scores.size(-1)
 
-        prediction_scores = torch.masked_select(prediction_scores, mlm_mask[..., None]).view(-1, num_classes)
+        if not self.config.loss_on_all_tokens:
+            prediction_scores = torch.masked_select(prediction_scores, mlm_mask[..., None]).view(-1, num_classes)
 
-        # select relevant labels
-        labels = torch.masked_select(input_ids, mlm_mask)
+            # select relevant labels
+            labels = torch.masked_select(input_ids, mlm_mask)
+
+        else:
+            # for consistency with huggingface MLM transformr, calculate loss on
+            # all token
+            prediction_scores = prediction_scores.view(-1, num_classes)
+            labels = input_ids
 
         masked_lm_loss = self.criterion(prediction_scores.view(-1, self.config.vocab_size), labels.view(-1))
 
@@ -109,7 +116,19 @@ class GrowingMLMTransformer(Growing):
             # select relevant labels
             labels = torch.masked_select(input_ids, mlm_mask)
 
-            loss += self.criterion(prediction_scores.view(-1, self.config.vocab_size), labels.view(-1))
+            if not self.config.loss_on_all_tokens:
+                prediction_scores = torch.masked_select(prediction_scores, mlm_mask[..., None]).view(-1, num_classes)
+
+                # select relevant labels
+                labels = torch.masked_select(input_ids, mlm_mask)
+                loss += self.criterion(prediction_scores.view(-1, self.config.vocab_size), labels.view(-1))
+
+            else:
+                # for consistency with huggingface MLM transformr, calculate loss on
+                # all token
+                prediction_scores = prediction_scores.view(-1, num_classes)
+
+                loss += self.criterion(prediction_scores.view(-1, self.config.vocab_size), input_ids.view(-1))
 
             correct += (predicted == labels).sum()
 
