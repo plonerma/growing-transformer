@@ -115,7 +115,7 @@ class GrowingMLMTransformer(Growing):
 
             total_samples += labels.size(0)
 
-        eval_loss = loss / total_samples
+        eval_loss = loss / len(batch_loader)
 
         try:
             perplexity = math.exp(eval_loss)
