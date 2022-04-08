@@ -127,9 +127,11 @@ class BaseTrainer:
                     eval_results = self.evaluate(test_data, batch_size=batch_size)
                     log.info(f"Eval loss: {eval_results['eval_loss']:.4}")
                     log.info(f"Eval accuracy: {eval_results['accuracy']:.4}")
+                    log.info(f"Eval perplexity: {eval_results['perplexity']:.4}")
                     if use_tensorboard:
                         tensorboard_writer.add_scalar("loss/evaluation", eval_results["eval_loss"], global_step)
                         tensorboard_writer.add_scalar("accuracy", eval_results["accuracy"], global_step)
+                        tensorboard_writer.add_scalar("perplexity", eval_results["perplexity"], global_step)
 
         except KeyboardInterrupt:
             log_line(log)
@@ -138,7 +140,7 @@ class BaseTrainer:
             if propagate_interrupt:
                 raise KeyboardInterrupt
 
-        results = dict(final_train_loss=loss, epoch=epoch)
+        results = dict(final_train_loss=loss, epoch=epoch, total_steps=global_step, **eval_results)
 
         if test_data:
             results.update(eval_results)
