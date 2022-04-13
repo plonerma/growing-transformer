@@ -1,0 +1,10 @@
+growth_phase:
+  - match: .mlp
+    split: True
+    num_novel: 16
+    num_keep: 16
+
+steps:
+  - train: 6
+  - grow: ${training.schedule.growth_phase}
+  - train: 6

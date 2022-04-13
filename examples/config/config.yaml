@@ -1,0 +1,5 @@
+defaults:
+  - base_config
+  - dataset: wiki_big
+  - model: static
+  - training: default

@@ -1,0 +1,5 @@
+num_epochs: 24
+
+steps:
+  - train:
+      num_epochs: ${training.schedule.num_epochs}

@@ -1,0 +1,3 @@
+name: "wikitext"
+version: "wikitext-2-raw-v1"
+downsample: 1.0
