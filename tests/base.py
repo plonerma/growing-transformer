@@ -23,6 +23,7 @@ class GrowingTest:
         d_head=16,
         intermediate_size=128,
         bert_like_state_dict=True,
+        num_hidden_layers=1,
     )
 
     model_class: Optional[Type[Growing]] = None

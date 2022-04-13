@@ -97,5 +97,11 @@ class GrowingEncoder(GrowingModule):
                 layer.layer_norm._weight = None
                 layer.layer_norm._bias = None
 
-        self.train(self.training)
+        # reset temporary variable
         self.reset_grow_state()
+
+        # set training flag of all new modules to own state
+        self.train(self.training)
+
+        # set config
+        self.config.num_hidden_layers = len(self.layer)

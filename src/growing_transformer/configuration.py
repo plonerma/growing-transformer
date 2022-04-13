@@ -17,9 +17,11 @@ class GrowingConfig(BertConfig):
     def __init__(
         self,
         *args,
-        num_hidden_layers: int = 1,
+        num_hidden_layers: int = 12,
         layer_norm_eps: float = 1e-9,
         d_head: int = 64,
+        d_head_kq: Optional[int] = None,
+        d_head_v: Optional[int] = None,
         d_model: int = 768,
         num_heads: int = 12,
         step_size: float = 1e-1,
@@ -47,6 +49,9 @@ class GrowingConfig(BertConfig):
         self.num_hidden_layers = num_hidden_layers
 
         self.d_head = d_head
+        self.d_head_kq = first_not_none(d_head_kq, d_head)
+        self.d_head_v = first_not_none(d_head_v, d_head)
+
         self.d_model = d_model
         self.num_heads = num_heads
         self.bert_like_state_dict = bert_like_state_dict
@@ -68,8 +73,3 @@ class GrowingConfig(BertConfig):
         self.eps_split_bias = first_not_none(eps_split_bias, eps_split)
         self.eps_novel_weight = first_not_none(eps_novel_weight, eps_novel)
         self.eps_novel_bias = first_not_none(eps_novel_bias, eps_novel)
-
-
-class GrowingConfigFull(GrowingConfig):
-    def __init__(self, *args, **kwargs):
-        super().__init__(num_hidden_layers=12, *args, **kwargs)

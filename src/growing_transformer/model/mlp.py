@@ -209,4 +209,9 @@ class GrowingMLP(GrowingModule):
         # adjust features
         self.linear_in.out_features, self.linear_in.in_features = self.linear_in.weight.size()
         self.linear_out.out_features, self.linear_out.in_features = self.linear_out.weight.size()
+
+        # adjust config
+        self.config.intermediate_size = self.linear_in.out_features
+
+        # reset temporary variables
         self.reset_grow_state()

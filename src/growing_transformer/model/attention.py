@@ -22,7 +22,7 @@ class GrowingAttention(GrowingModule):
         super().__init__(config=config)
 
         self.heads = config.num_attention_heads
-        self.d_head = config.d_head
+        self.d_head = config.d_head_v
         self.d_model = config.d_model
 
         self.dot_product = ScaledDotProductAttention(config=config)
@@ -168,6 +168,7 @@ class GrowingAttention(GrowingModule):
             )
 
         self.reset_grow_state()
+        self.config.d_head_v = self.d_head
 
 
 class ScaledDotProductAttention(GrowingModule):
@@ -175,7 +176,7 @@ class ScaledDotProductAttention(GrowingModule):
         super().__init__(config=config)
 
         self.heads = config.num_attention_heads
-        self.d_head = config.d_head
+        self.d_head = config.d_head_kq
         self.query_linear = torch.nn.Linear(config.d_model, self.heads * self.d_head)
         self.key_linear = torch.nn.Linear(config.d_model, self.heads * self.d_head)
         self.reset_grow_state()
@@ -315,3 +316,4 @@ class ScaledDotProductAttention(GrowingModule):
             self.key_linear.bias = torch.nn.Parameter(k_bias.reshape(self.heads * self.d_head))
 
         self.reset_grow_state()
+        self.config.d_head_kq = self.d_head
