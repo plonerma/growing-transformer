@@ -108,28 +108,22 @@ class GrowingMLMTransformer(Growing):
             input_ids = batch["input_ids"].to(growing_transformer.device)
 
             prediction_scores = self(masked_input, attention_mask)
-            num_classes = prediction_scores.size(-1)
-
-            prediction_scores = torch.masked_select(prediction_scores, mlm_mask[..., None]).view(-1, num_classes)
-            predicted = prediction_scores.argmax(-1)
+            num_classes = self.config.vocab_size
 
             # select relevant labels
             labels = torch.masked_select(input_ids, mlm_mask)
 
             if not self.config.loss_on_all_tokens:
                 prediction_scores = torch.masked_select(prediction_scores, mlm_mask[..., None]).view(-1, num_classes)
-
-                # select relevant labels
-                labels = torch.masked_select(input_ids, mlm_mask)
-                loss += self.criterion(prediction_scores.view(-1, self.config.vocab_size), labels.view(-1))
+                loss += self.criterion(prediction_scores.view(-1, num_classes), labels.view(-1))
 
             else:
                 # for consistency with huggingface MLM transformr, calculate loss on
                 # all token
-                prediction_scores = prediction_scores.view(-1, num_classes)
+                loss += self.criterion(prediction_scores.view(-1, num_classes), input_ids.view(-1))
+                prediction_scores = torch.masked_select(prediction_scores, mlm_mask[..., None]).view(-1, num_classes)
 
-                loss += self.criterion(prediction_scores.view(-1, self.config.vocab_size), input_ids.view(-1))
-
+            predicted = prediction_scores.argmax(-1)
             correct += (predicted == labels).sum()
 
             total_samples += labels.size(0)
