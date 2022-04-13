@@ -7,7 +7,6 @@ from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
 
 from growing_transformer import GrowingConfig, GrowingTrainer, GrowthSchedule
-from growing_transformer.model import GrowingMLP as MLP
 from growing_transformer.trainer.util import GridSearch, log_line
 
 log = logging.getLogger("growing_transformer")
@@ -55,14 +54,25 @@ for i, p in enumerate(grid):
 
     trainer = GrowingTrainer(model)
 
-    schedule = GrowthSchedule(hparams["num_epochs"])
+    steps = [("train", hparams["num_epochs"])]
 
     for _ in range(hparams["growth_phases"]):
-        schedule.add_phase(
-            epochs=hparams["num_epochs"],
-            grow={MLP: dict(split=hparams["split"], num_novel=hparams["num_novel"])},
-            num_new_parts={MLP: hparams["num_new_parts"]},
+        steps.append(
+            (
+                "grow",
+                [
+                    dict(
+                        match=r"\.[ab]",
+                        split=hparams["split"],
+                        num_novel=hparams["num_novel"],
+                        num_new_parts=hparams["num_new_parts"],
+                    )
+                ],
+            )
         )
+        steps.append(("train", hparams["num_epochs"]))
+
+    schedule = GrowthSchedule(steps)
 
     try:
         metrics = trainer.train(

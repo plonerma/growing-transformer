@@ -1,5 +1,6 @@
 from dataclasses import dataclass, field
-from typing import List, Optional
+from enum import Enum
+from typing import Mapping, Optional, Sequence
 
 from .. import GrowingModule
 
@@ -30,21 +31,33 @@ class GrowthPhase:
         return self.index is not None and self.index == 0
 
 
+class StepType(Enum):
+    train = 0
+    grow = 1
+
+
 class GrowthSchedule:
-    def __init__(self, intial_epochs: int = 1):
-        self.initial_epochs = intial_epochs
-        self.growth_phases: List[GrowthPhase] = list()
+    def __init__(self, steps: Sequence):
+        self.steps = list()
+
+        for step_spec in steps:
+            if isinstance(step_spec, Mapping):
+                assert len(step_spec) == 1, "Step should have exactly one key."
+                ((step_type, step_params),) = step_spec.items()
+            else:
+                assert len(step_spec) == 2, "Step should have exactly have type and params."
+                step_type, step_params = step_spec
+
+            step_type = StepType[step_type.lower()]
+
+            self.steps.append((step_type, step_params))
 
     def __iter__(self):
-        yield GrowthPhase(self.intial_epochs, 0)
-        yield from self.growth_phases
+        return iter(self.steps)
 
-    def add_phase(self, *args, **kw):
-        index = len(self.growth_phases) + 1
-        self.growth_phases.append(GrowthPhase(*args, index=index, **kw))
+    def __str__(self):
+        entries = "".join([f"  {step},\n" for step in self])
+        return f"{self.__class__.__name__} [\n{entries}]"
 
     def __len__(self):
-        return len(self.growth_phases)
-
-    def total_epochs(self):
-        return sum([phase.epochs for phase in self])
+        return len(self.steps)

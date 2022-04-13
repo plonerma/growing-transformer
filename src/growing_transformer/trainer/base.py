@@ -35,7 +35,8 @@ class BaseTrainer:
         propagate_interrupt=False,
         tensorboard_writer=None,
         log_training_info=True,
-        start_epoch=0,
+        start_epoch: int = 0,
+        global_step: int = 0,
         **kw,
     ):
 
@@ -67,15 +68,24 @@ class BaseTrainer:
 
             self.model.train()
 
-            for epoch in range(start_epoch, start_epoch + num_epochs):
-                log.info(f"Epoch #{epoch:02}")
+            # === START OF TRAINING LOOP ===
 
+            for epoch in range(start_epoch, start_epoch + num_epochs):
                 batch_loader = DataLoader(
                     train_data,
                     batch_size=batch_size,
                     shuffle=shuffle,
                     num_workers=0 if num_workers is None else num_workers,
                 )
+
+                log.info(f"Epoch #{epoch:02}")
+
+                if use_tensorboard:
+                    # write intial values
+
+                    for i, group in enumerate(optimizer.param_groups):
+                        tensorboard_writer.add_scalar(f"learning_rate/{i}", group["lr"], global_step)
+                    tensorboard_writer.add_scalar("epochs_completed", epoch, global_step)
 
                 loss_gca_sum = 0
                 loss_epoch_sum = 0
@@ -89,8 +99,6 @@ class BaseTrainer:
                     loss_epoch_sum += loss.detach()
                     loss_gca_sum += loss.detach()
 
-                    global_step = (epoch * len(batch_loader) + i) / gca_batches
-
                     if (i + 1) % gca_batches == 0:
 
                         optimizer.step()
@@ -100,26 +108,28 @@ class BaseTrainer:
 
                         optimizer.zero_grad()
 
+                        global_step += 1
+
                         tensorboard_writer.add_scalar(
                             "loss/train_loss_accumulated", loss_gca_sum / gca_batches, global_step
                         )
 
                         loss_gca_sum = 0
 
-                    if i % 1000 == 0 and use_tensorboard:
-                        tensorboard_writer.add_scalar("loss/train_batchwise", loss_epoch_sum / (i + 1), global_step)
+                        if (i + 1) % (100 * gca_batches) == 0 and use_tensorboard:
+                            tensorboard_writer.add_scalar("loss/train_batchwise", loss_epoch_sum / (i + 1), global_step)
 
                 loss = loss_epoch_sum / i
 
                 if use_tensorboard:
-                    lr = 0.0
-                    for group in optimizer.param_groups:
-                        lr = group["lr"]
+                    for i, group in enumerate(optimizer.param_groups):
+                        tensorboard_writer.add_scalar(f"learning_rate/{i}", group["lr"], global_step)
 
-                    tensorboard_writer.add_scalar("learning rate", lr, global_step)
+                    tensorboard_writer.add_scalar("epochs_completed", epoch + 1, global_step)
+
                     tensorboard_writer.add_scalar("loss/train_epoch_avg", loss, global_step)
                     tensorboard_writer.add_scalar(
-                        "training/model size", sum(p.numel() for p in self.model.parameters()), global_step
+                        "model size", sum(p.numel() for p in self.model.parameters()), global_step
                     )
 
                 log.info(f"Train loss: {loss:.4}")
@@ -140,7 +150,13 @@ class BaseTrainer:
             if propagate_interrupt:
                 raise KeyboardInterrupt
 
-        results = dict(final_train_loss=loss, epoch=epoch, total_steps=global_step, **eval_results)
+        results = dict(
+            final_train_loss=loss,
+            epoch=epoch,
+            total_steps=(num_epochs * len(batch_loader)) // gca_batches,
+            global_step=global_step,
+            **eval_results,
+        )
 
         if test_data:
             results.update(eval_results)

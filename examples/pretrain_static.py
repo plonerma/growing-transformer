@@ -9,13 +9,13 @@ from transformers import BertTokenizer
 
 import growing_transformer
 from growing_transformer import BaseTrainer, GrowingMLMTransformer
-from growing_transformer.configuration import GrowingConfigFull
+from growing_transformer.configuration import GrowingConfig
 from growing_transformer.data import MLMSegmenetDataset
 from growing_transformer.trainer.util import add_file_handler
 
 growing_transformer.device = torch.device("cuda:0")
 
-base_path = Path("results/pretrained_static")
+base_path = Path("results/pretrained_static_04")
 base_path.mkdir(exist_ok=True, parents=True)
 
 log = logging.getLogger("growing_transformer")
@@ -32,7 +32,8 @@ tokenizer = BertTokenizer.from_pretrained("bert-base-cased")
 train_data = MLMSegmenetDataset(corpus["train"], tokenizer)  # .downsampled(0.1)
 test_data = MLMSegmenetDataset(corpus["test"], tokenizer)
 
-config = GrowingConfigFull()
+config = GrowingConfig()
+
 
 model = GrowingMLMTransformer(config)
 
@@ -40,6 +41,9 @@ tensorboard_writer = SummaryWriter(base_path / "run")
 
 trainer = BaseTrainer(model)
 
-trainer.train(train_data, num_epochs=24, test_data=test_data, tensorboard_writer=tensorboard_writer, batch_size=16)
+
+trainer.train(
+    train_data, num_epochs=24, test_data=test_data, tensorboard_writer=tensorboard_writer, batch_size=64, gca_batches=4
+)
 
 torch.save(model.state_dict(), base_path / "trained_model.pt")

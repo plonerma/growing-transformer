@@ -13,7 +13,6 @@ from growing_transformer import (
     GrowthSchedule,
 )
 from growing_transformer.data import MLMSegmenetDataset
-from growing_transformer.model import GrowingMLP as MLP
 from growing_transformer.trainer.util import add_file_handler
 
 base_path = Path("results/pretrained_growing")
@@ -39,30 +38,18 @@ model = GrowingMLMTransformer(config)
 
 trainer = GrowingTrainer(model)
 
-schedule = GrowthSchedule(2)
-
-schedule.add_phase(
-    epochs=2,
-    grow={MLP: dict(split=True, num_novel=16)},
-    num_new_parts={MLP: 16},
-)
-
-schedule.add_phase(
-    epochs=2,
-    grow={MLP: dict(split=True, num_novel=16)},
-    num_new_parts={MLP: 16},
-)
-
-schedule.add_phase(
-    epochs=2,
-    grow={MLP: dict(split=True, num_novel=16)},
-    num_new_parts={MLP: 16},
-)
-
-schedule.add_phase(
-    epochs=2,
-    grow={MLP: dict(split=True, num_novel=16)},
-    num_new_parts={MLP: 16},
+schedule = GrowthSchedule(
+    [
+        ("train", 2),
+        ("grow", [dict(match=r"\.mlp", split=True, num_novel=16, num_new_parts=16)]),
+        ("train", 2),
+        ("grow", [dict(match=r"\.mlp", split=True, num_novel=16, num_new_parts=16)]),
+        ("train", 2),
+        ("grow", [dict(match=r"\.mlp", split=True, num_novel=16, num_new_parts=16)]),
+        ("train", 2),
+        ("grow", [dict(match=r"\.mlp", split=True, num_novel=16, num_new_parts=16)]),
+        ("train", 2),
+    ]
 )
 
 trainer.train(train_data, schedule=schedule)

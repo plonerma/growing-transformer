@@ -9,7 +9,7 @@ from transformers import BertTokenizer
 
 import growing_transformer
 from growing_transformer import BaseTrainer
-from growing_transformer.configuration import GrowingConfigFull
+from growing_transformer.configuration import GrowingConfig
 from growing_transformer.data import MLMSegmenetDataset
 from growing_transformer.model import HuggingfaceMLMTransformer
 from growing_transformer.trainer.util import add_file_handler
@@ -33,7 +33,7 @@ tokenizer = BertTokenizer.from_pretrained("bert-base-cased")
 train_data = MLMSegmenetDataset(corpus["train"], tokenizer)  # .downsampled(0.1)
 test_data = MLMSegmenetDataset(corpus["test"], tokenizer)
 
-config = GrowingConfigFull()
+config = GrowingConfig()
 
 # model = GrowingMLMTransformer(config)
 model = HuggingfaceMLMTransformer(config)
