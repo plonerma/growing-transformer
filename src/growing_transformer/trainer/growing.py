@@ -7,8 +7,6 @@ from typing import Optional
 import torch
 from torch.utils.data import DataLoader
 
-import growing_transformer
-
 from .base import BaseTrainer
 from .schedule import GrowthSchedule
 from .util import log_line
@@ -31,47 +29,93 @@ class GrowingTrainer(BaseTrainer):
         self._tune_step_size = tune_step_size
         self._selection_method = selection_method
 
-    def grow_model(self, substeps, grow_data=None, tensorboard_writer=None, index=None):
+    def grow_model(
+        self,
+        substeps,
+        grow_data=None,
+        tensorboard_writer=None,
+        index=None,
+        batch_size: int = 32,
+        shuffle=True,
+        num_workers: Optional[int] = None,
+    ):
         log.info("Growing model")
 
+        # === Match and grow modules ===
         grown_modules = list()
 
-        for params in substeps:
-
-            if params.get("match_end", True):
-                pattern = re.compile(params["match"] + "$")
+        for conf in substeps:
+            if conf.get("match_end", True):
+                pattern_str = conf["match"] + "$"
             else:
-                pattern = re.compile(params["match"])
+                pattern_str = conf["match"]
 
-            num_novel = params["num_novel"]
-            split = params["split"]
-            num_kept_parts = params["num_keep"]
+            pattern = re.compile(pattern_str)
 
+            # configuration used for growing
+            num_novel = conf["num_novel"]
+            split = conf["split"]
+
+            num_matched = 0
             for name, m in self.model.growing_modules(named=True):
                 if re.search(pattern, name) is not None:
-                    log.info(f"Matched {name}, adding {num_kept_parts} new parts.")
                     size = m.grow(num_novel=num_novel, split=split)
-                    grown_modules.append((m, size, num_kept_parts))
+                    grown_modules.append((m, size, conf))
+                    num_matched += 1
 
-        if self._tune_direction:
+            log.info(f"Matched {num_matched} to {pattern_str} ({conf}).")
+
+        # === Tune direction and step sizes ===
+        if self._tune_direction or self._tune_step_size:
             assert grow_data is not None
-            self.tune_direction(grow_data)
 
-        if self._tune_step_size:
-            assert grow_data is not None
-            self.tune_step_size(grow_data)
+            param_groups = list()
+            relevant_params = list()
 
+            for m, size, conf in grown_modules:
+                kw = conf.get("tune_params", dict())
+
+                if self._tune_direction:
+                    params = list(m.direction_params())
+                    param_groups.append({"params": params, **kw.get("direction", dict())})
+                    relevant_params += params
+                if self._tune_step_size:
+                    params = list(m.step_size_params())
+                    param_groups.append({"params": params, **kw.get("step_size", dict())})
+                    relevant_params += params
+
+            optimizer = torch.optim.RMSprop(param_groups, lr=1e-3, momentum=0.1, alpha=0.9)
+
+            with self.some_grad_only(*params):
+                batch_loader = DataLoader(
+                    grow_data,
+                    batch_size=batch_size,
+                    shuffle=shuffle,
+                    num_workers=0 if num_workers is None else num_workers,
+                )
+
+                for batch in batch_loader:
+                    optimizer.zero_grad()
+
+                    loss = self.model.forward_loss(batch)
+                    loss.backward()
+                    optimizer.step()
+
+        # === Select neurons ===
         if self._selection_method == "firefly":
             self.calculate_new_gradient(grow_data)
 
-            for m, size, num_kept_parts in grown_modules:
+            for m, size, conf in grown_modules:
+                num_kept_parts = conf["num_keep"]
                 selected = m.select(num_kept_parts)
                 m.degrow(selected)
                 if tensorboard_writer is not None and selected.numel() and index is not None:
                     tensorboard_writer.add_histogram(f"selected neurons/{m.__class__.__name__}", selected, index)
 
         elif self._selection_method == "random":
-            for m, size, num_kept_parts in grown_modules:
+            for m, size, conf in grown_modules:
+
+                num_kept_parts = conf["num_keep"]
 
                 if len(size) == 0:
                     continue
@@ -115,7 +159,13 @@ class GrowingTrainer(BaseTrainer):
             if step_type == step_type.grow:
                 grow_start = time.time()
                 self.grow_model(
-                    step_params, grow_data=grow_data, tensorboard_writer=tensorboard_writer, index=step_index
+                    step_params,
+                    grow_data=grow_data,
+                    tensorboard_writer=tensorboard_writer,
+                    index=step_index,
+                    batch_size=batch_size,
+                    shuffle=shuffle,
+                    num_workers=num_workers,
                 )
                 grow_end = time.time()
 
@@ -174,48 +224,6 @@ class GrowingTrainer(BaseTrainer):
         for p, rg in zip(self.model.parameters(), _requires_grad):
             p.requires_grad = rg
 
-    def tune_with_penalty(
-        self,
-        params,
-        train_data,
-        optimizer=torch.optim.RMSprop,
-        optim_kw={},
-        batch_size: int = 32,
-        shuffle: bool = True,
-        num_workers: Optional[int] = None,
-    ):
-        if not isinstance(optimizer, torch.optim.Optimizer):
-            optim_kw = {"lr": 1e-3, "momentum": 0.1, "alpha": 0.9, **optim_kw}
-
-            optimizer = optimizer(params, **optim_kw)
-
-        with self.some_grad_only(*params):
-            batch_loader = DataLoader(
-                train_data,
-                batch_size=batch_size,
-                shuffle=shuffle,
-                num_workers=0 if num_workers is None else num_workers,
-            )
-
-            for batch in batch_loader:
-                optimizer.zero_grad()
-
-                loss = self.model.forward_loss(batch)
-
-                penalty = torch.tensor(0.0, device=growing_transformer.device)
-                for p in params:
-                    penalty += (p**2).sum()
-
-                loss.backward()
-                penalty.backward()
-                optimizer.step()
-
-    def tune_direction(self, *args, **kwargs):
-        self.tune_with_penalty(list(self.model.direction_params()), *args, **kwargs)
-
-    def tune_new_parts(self, *args, **kwargs):
-        self.tune_with_penalty(list(self.model.new_params()), *args, **kwargs)
-
     def calculate_new_gradient(
         self, train_data, batch_size: int = 32, shuffle: bool = True, num_workers: Optional[int] = None
     ):
@@ -227,7 +235,7 @@ class GrowingTrainer(BaseTrainer):
             num_workers=0 if num_workers is None else num_workers,
         )
 
-        with self.some_grad_only(*self.model.new_params()):
+        with self.some_grad_only(*self.model.step_size_params()):
             self.model.zero_grad()
 
             for batch in batch_loader:

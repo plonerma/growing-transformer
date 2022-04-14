@@ -39,7 +39,7 @@ class Growing(torch.nn.Module):
                 if p is not None:
                     yield p
 
-    def new_params(self) -> Iterable[torch.nn.Parameter]:
+    def step_size_params(self) -> Iterable[torch.nn.Parameter]:
         for m in self.growing_modules():
             if not isinstance(m, GrowingModule):
                 continue

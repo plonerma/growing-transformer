@@ -1,8 +1,16 @@
+tuning_weight_decay: 0.2
+
 growth_phase:
   - match: .mlp
     split: True
     num_novel: 16
     num_keep: 16
+    tune_params:
+      direction:
+        weight_decay: ${training.schedule.tuning_weight_decay}
+      step_size:
+        weight_decay: ${training.schedule.tuning_weight_decay}
+
 
 steps:
   - train:
