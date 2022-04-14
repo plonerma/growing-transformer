@@ -1,5 +1,6 @@
 import logging
 from pathlib import Path
+from typing import Union
 
 import datasets
 import hydra
@@ -13,6 +14,7 @@ from transformers import BertTokenizer
 import growing_transformer
 from growing_transformer import GrowingConfig, GrowingTrainer, GrowthSchedule
 from growing_transformer.data import MLMSegmenetDataset
+from growing_transformer.model import GrowingMLMTransformer, HuggingfaceMLMTransformer
 from growing_transformer.trainer.util import add_file_handler
 
 cs = ConfigStore.instance()
@@ -24,21 +26,13 @@ def main(cfg: Configuration):
     log = logging.getLogger("growing_transformer")
     add_file_handler(log, Path("training.log"))
 
+    growing_transformer.device = torch.device(cfg.training.device)
+
     model_config = GrowingConfig(**cfg.model.config)
     schedule = GrowthSchedule(cfg.training.schedule["steps"])
 
     log.info(model_config)
     log.info(schedule)
-
-    from growing_transformer import GrowingMLMTransformer
-
-    model = GrowingMLMTransformer(model_config)
-    for n, m in model.named_modules():
-        print(n)
-
-    quit(0)
-
-    growing_transformer.device = torch.device(cfg.training.device)
 
     corpus = datasets.load_dataset(cfg.dataset.name, cfg.dataset.version)
 
@@ -52,18 +46,16 @@ def main(cfg: Configuration):
 
     test_data = MLMSegmenetDataset(corpus["test"], tokenizer)
 
-    if cfg.model.type == "growing":
-        from growing_transformer import GrowingMLMTransformer
+    model: Union[GrowingMLMTransformer, HuggingfaceMLMTransformer]
 
+    if cfg.model.type == "growing":
         model = GrowingMLMTransformer(model_config)
 
     elif cfg.model.type == "huggingface":
-        from growing_transformer.model import HuggingfaceMLMTransformer
-
         model = HuggingfaceMLMTransformer(model_config)
 
     else:
-        raise RuntimeError(f"Model variant {cfg.model.variant} not implemented.")
+        raise RuntimeError(f"Model variant {cfg.model.type} not implemented.")
 
     tensorboard_writer = SummaryWriter(".")
 

@@ -25,6 +25,7 @@ class GrowingTransformer(Growing):
         self.encoder = GrowingEncoder(config)
 
         self.pooler = BertPooler(config) if add_pooling_layer else None
+        self.to(growing_transformer.device)
 
     def get_input_embeddings(self):
         return self.embeddings.word_embeddings

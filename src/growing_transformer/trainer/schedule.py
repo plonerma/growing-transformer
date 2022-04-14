@@ -1,6 +1,6 @@
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Mapping, Optional, Sequence
+from typing import Any, List, Mapping, Optional, Sequence, Tuple, Union
 
 from .. import GrowingModule
 
@@ -36,8 +36,11 @@ class StepType(Enum):
     grow = 1
 
 
+StepSpec = Union[Tuple[str, Any], List[Mapping[str, Any]]]
+
+
 class GrowthSchedule:
-    def __init__(self, steps: Sequence):
+    def __init__(self, steps: Sequence[StepSpec]):
         self.steps = list()
 
         for step_spec in steps:
@@ -45,12 +48,11 @@ class GrowthSchedule:
                 assert len(step_spec) == 1, "Step should have exactly one key."
                 ((step_type, step_params),) = step_spec.items()
             else:
+                assert isinstance(step_spec, tuple)
                 assert len(step_spec) == 2, "Step should have exactly have type and params."
                 step_type, step_params = step_spec
 
-            step_type = StepType[step_type.lower()]
-
-            self.steps.append((step_type, step_params))
+            self.steps.append((StepType[step_type.lower()], step_params))
 
     def __iter__(self):
         return iter(self.steps)

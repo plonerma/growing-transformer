@@ -1,4 +1,5 @@
 type: growing
 config:
   loss_on_all_tokens: True
+  intermediate_size: 256
 tokenizer: "bert-base-cased"

@@ -5,6 +5,8 @@ from torch import Tensor
 from torch.nn import ModuleList, Parameter
 from torch.nn.init import uniform_
 
+import growing_transformer
+
 from ..configuration import GrowingConfig
 from .base import GrowingModule
 from .layer import GrowingLayer
@@ -16,6 +18,7 @@ class GrowingEncoder(GrowingModule):
         self.layer = torch.nn.ModuleList([GrowingLayer(config=config) for _ in range(self.config.num_hidden_layers)])
 
         self.reset_grow_state()
+        self.to(growing_transformer.device)
 
     def reset_grow_state(self) -> None:
         # in this case, it is layers not neurons
@@ -39,7 +42,9 @@ class GrowingEncoder(GrowingModule):
         new_layers = len(self.layer)
 
         step_size = self.config.layer_step_size
-        self.new_parts = Parameter(torch.ones(new_layers) * step_size, requires_grad=False)
+        self.new_parts = Parameter(
+            torch.ones(new_layers, device=growing_transformer.device) * step_size, requires_grad=False
+        )
 
         self._new_layers = torch.nn.ModuleList()
 

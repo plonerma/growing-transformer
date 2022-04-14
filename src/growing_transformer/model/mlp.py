@@ -5,6 +5,8 @@ from torch.nn import Parameter
 from torch.nn.init import uniform_
 from transformers.activations import ACT2FN
 
+import growing_transformer
+
 from ..configuration import GrowingConfig
 from .base import GrowingModule
 
@@ -36,6 +38,7 @@ class GrowingMLP(GrowingModule):
             self.activation = self.config.hidden_act
 
         self.reset_grow_state()
+        self.to(growing_transformer.device)
 
     def reset_grow_state(self) -> None:
         # step size (used to calculate gradients for selecting kept neurons)
@@ -119,20 +122,32 @@ class GrowingMLP(GrowingModule):
 
         # add parameter to measure influence/gradient of adding new neurons
         self.new_parts = Parameter(
-            torch.ones(self.hidden_features * split + num_novel) * step_size, requires_grad=False
+            torch.ones(self.hidden_features * split + num_novel, device=growing_transformer.device) * step_size,
+            requires_grad=False,
         )
 
         # create update direction for weight and bias
         if split:
-            self._in_weight_split = Parameter(torch.empty(self.hidden_features, self.in_features), requires_grad=False)
-            self._in_bias_split = Parameter(torch.empty(self.hidden_features), requires_grad=False)
+            self._in_weight_split = Parameter(
+                torch.empty(self.hidden_features, self.in_features, device=growing_transformer.device),
+                requires_grad=False,
+            )
+            self._in_bias_split = Parameter(
+                torch.empty(self.hidden_features, device=growing_transformer.device), requires_grad=False
+            )
             uniform_(self._in_weight_split, -eps_split_weight, eps_split_weight)
             uniform_(self._in_bias_split, -eps_split_bias, eps_split_bias)
 
         if num_novel > 0:
-            self._in_weight_novel = Parameter(torch.empty(num_novel, self.in_features), requires_grad=False)
-            self._out_weight_novel = Parameter(torch.empty(self.out_features, num_novel), requires_grad=False)
-            self._in_bias_novel = Parameter(torch.empty(num_novel), requires_grad=False)
+            self._in_weight_novel = Parameter(
+                torch.empty(num_novel, self.in_features, device=growing_transformer.device), requires_grad=False
+            )
+            self._out_weight_novel = Parameter(
+                torch.empty(self.out_features, num_novel, device=growing_transformer.device), requires_grad=False
+            )
+            self._in_bias_novel = Parameter(
+                torch.empty(num_novel, device=growing_transformer.device), requires_grad=False
+            )
             uniform_(self._in_weight_novel, -eps_novel_weight, eps_novel_weight)
             uniform_(self._out_weight_novel, -eps_novel_weight, eps_novel_weight)
             uniform_(self._in_bias_novel, -eps_novel_bias, eps_novel_bias)
@@ -157,14 +172,11 @@ class GrowingMLP(GrowingModule):
                 num_split = 0
                 novel = selected
 
-            weight_in = torch.empty(num_old + selected.size(0), self.in_features)
+            weight_in = torch.empty(num_old + selected.size(0), self.in_features, device=growing_transformer.device)
 
-            weight_out = torch.empty(
-                self.out_features,
-                num_old + selected.size(0),
-            )
+            weight_out = torch.empty(self.out_features, num_old + selected.size(0), device=growing_transformer.device)
 
-            bias_in = torch.empty(num_old + selected.size(0))
+            bias_in = torch.empty(num_old + selected.size(0), device=growing_transformer.device)
 
             # copy old neurons (split neurons will be overwritten)
             weight_in[:num_old] = self.linear_in.weight

@@ -7,7 +7,8 @@ import torch
 from torch.optim.lr_scheduler import OneCycleLR  # type: ignore
 from torch.utils.data import DataLoader
 
-from .. import device
+import growing_transformer
+
 from .util import log_line
 
 log = logging.getLogger("growing_transformer")
@@ -40,7 +41,7 @@ class BaseTrainer:
         **kw,
     ):
 
-        self.model.to(device)
+        self.model.to(growing_transformer.device)
 
         if log_training_info:
             log.info(f"Model: {self.model}")
@@ -165,7 +166,6 @@ class BaseTrainer:
 
     def evaluate(self, data, batch_size=32):
         self.model.eval()
-        self.model.to(device)
 
         with torch.no_grad():
             return self.model.evaluate(data, batch_size=batch_size)

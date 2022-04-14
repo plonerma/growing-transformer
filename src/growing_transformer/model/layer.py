@@ -3,6 +3,8 @@ from typing import Optional
 import torch
 from torch import Tensor
 
+import growing_transformer
+
 from ..configuration import GrowingConfig
 from .attention import GrowingAttention
 from .base import Growing
@@ -24,6 +26,8 @@ class GrowingLayer(Growing):
 
         eps = self.config.layer_norm_eps
         self.layer_norm = torch.nn.LayerNorm(config.d_model, eps=eps)
+
+        self.to(growing_transformer.device)
 
         if self.config.bert_like_state_dict:
             self._register_state_dict_hook(self._bert_state_dict_hook)

@@ -22,10 +22,13 @@ class Growing(torch.nn.Module):
             if isinstance(child, Growing):
                 yield child
 
-    def growing_modules(self):
-        for m in self.modules():
+    def growing_modules(self, named=False):
+        for n, m in self.named_modules():
             if isinstance(m, Growing):
-                yield m
+                if named:
+                    yield n, m
+                else:
+                    yield m
 
     def direction_params(self) -> Iterable[torch.nn.Parameter]:
         for m in self.growing_modules():

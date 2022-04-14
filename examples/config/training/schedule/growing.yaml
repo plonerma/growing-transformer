@@ -5,6 +5,8 @@ growth_phase:
     num_keep: 16
 
 steps:
-  - train: 6
+  - train:
+      num_epochs: 2
   - grow: ${training.schedule.growth_phase}
-  - train: 6
+  - train:
+      num_epochs: 2

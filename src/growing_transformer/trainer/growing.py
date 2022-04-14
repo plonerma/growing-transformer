@@ -7,6 +7,8 @@ from typing import Optional
 import torch
 from torch.utils.data import DataLoader
 
+import growing_transformer
+
 from .base import BaseTrainer
 from .schedule import GrowthSchedule
 from .util import log_line
@@ -30,6 +32,8 @@ class GrowingTrainer(BaseTrainer):
         self._selection_method = selection_method
 
     def grow_model(self, substeps, grow_data=None, tensorboard_writer=None, index=None):
+        log.info("Growing model")
+
         grown_modules = list()
 
         for params in substeps:
@@ -39,14 +43,14 @@ class GrowingTrainer(BaseTrainer):
             else:
                 pattern = re.compile(params["match"])
 
-            num_novel = params.get("num_novel", 0)
-            split = params.get("split", False)
-            num_kept_parts = params.get("num_kept_parts", 0)
+            num_novel = params["num_novel"]
+            split = params["split"]
+            num_kept_parts = params["num_keep"]
 
-            for name, m in self.model.growing_modules():
+            for name, m in self.model.growing_modules(named=True):
                 if re.search(pattern, name) is not None:
+                    log.info(f"Matched {name}, adding {num_kept_parts} new parts.")
                     size = m.grow(num_novel=num_novel, split=split)
-
                     grown_modules.append((m, size, num_kept_parts))
 
         if self._tune_direction:
@@ -126,7 +130,6 @@ class GrowingTrainer(BaseTrainer):
                 train_info = super().train(
                     train_data=train_data,
                     test_data=test_data,
-                    num_epochs=step_params,
                     batch_size=batch_size,
                     shuffle=shuffle,
                     num_workers=num_workers,
@@ -146,6 +149,8 @@ class GrowingTrainer(BaseTrainer):
                     tensorboard_writer.add_scalar("time/training", train_end - train_start, global_step)
 
                 log.info(f"Epoch {current_epoch} - loss: {train_info['final_train_loss']}")
+
+                current_epoch += 1
 
         return train_info
 
@@ -197,7 +202,7 @@ class GrowingTrainer(BaseTrainer):
 
                 loss = self.model.forward_loss(batch)
 
-                penalty = torch.tensor(0.0)
+                penalty = torch.tensor(0.0, device=growing_transformer.device)
                 for p in params:
                     penalty += (p**2).sum()
 
