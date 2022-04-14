@@ -59,6 +59,7 @@ class GrowingMLMTransformer(Growing):
         self.cls = BertOnlyMLMHead(config)
 
         self.criterion = torch.nn.CrossEntropyLoss()
+        self.to(growing_transformer.device)
 
     def forward(self, inputs: Tensor, attention_mask: Optional[Tensor] = None, mlm_mask: Optional[Tensor] = None):
         inputs.to(growing_transformer.device)

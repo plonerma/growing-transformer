@@ -154,6 +154,7 @@ class GrowingTrainer(BaseTrainer):
 
         global_step = 0
         current_epoch = 0
+        train_info = None
 
         for step_index, (step_type, step_params) in enumerate(schedule):
             if step_type == step_type.grow:
