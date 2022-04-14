@@ -220,7 +220,7 @@ class GrowingTest:
 class SplittingTest(GrowingTest):
     growth_params = [
         dict(kw=dict(split=True, num_novel=4), config=dict(eps_split=1, eps_novel=1, step_size=1e-5)),
-        dict(kw=dict(split=False, num_novel=4), config=dict(eps_split=1, eps_novel=1e-7, step_size=1)),
+        dict(kw=dict(split=False, num_novel=4), config=dict(eps_split=1, eps_novel=1e-4, step_size=1)),
         dict(kw=dict(split=True, num_novel=0), config=dict(eps_split=1e-4, eps_novel=1, step_size=1)),
         dict(kw=dict(split=True, num_novel=4), config=dict(eps_split=1e-4, eps_novel=1e-4, step_size=1)),
     ]
@@ -257,3 +257,37 @@ class SplittingTest(GrowingTest):
 
         # the change should be minor
         assert torch.all(diff < 1e-2)
+
+    @pytest.mark.parametrize("params", growth_params)
+    def test_growth_exists(self, params):
+        """With these growth parameters, the function of the network should be
+        changed.
+        """
+        torch.manual_seed(0)
+
+        config, kw = params["config"], params["kw"]
+
+        model = self.new_model(config)
+
+        model.eval()
+
+        x = self.random_batch()
+
+        y_a = model(x)
+
+        if isinstance(model, GrowingModule):
+            # grow only the module itself
+            model.grow(**kw)
+        else:
+            # test for composite growth
+            for m in model.growing_modules():
+                m.grow(**kw)
+
+        y_b = model(x)
+
+        diff = torch.abs(y_a - y_b)
+
+        log.info(f"Max difference {diff.max()}")
+
+        # but should be there
+        assert torch.any(diff > 1e-12)
