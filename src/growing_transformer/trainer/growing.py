@@ -22,13 +22,13 @@ class GrowingTrainer(BaseTrainer):
         model,
         *,
         tune_direction: bool = True,
-        tune_new_parts: bool = True,
+        tune_step_size: bool = True,
         selection_method="firefly",
     ):
         super().__init__(model)
 
         self._tune_direction = tune_direction
-        self._tune_new_parts = tune_new_parts
+        self._tune_step_size = tune_step_size
         self._selection_method = selection_method
 
     def grow_model(self, substeps, grow_data=None, tensorboard_writer=None, index=None):
@@ -57,9 +57,9 @@ class GrowingTrainer(BaseTrainer):
             assert grow_data is not None
             self.tune_direction(grow_data)
 
-        if self._tune_direction:
+        if self._tune_step_size:
             assert grow_data is not None
-            self.tune_new_parts(grow_data)
+            self.tune_step_size(grow_data)
 
         if self._selection_method == "firefly":
             self.calculate_new_gradient(grow_data)

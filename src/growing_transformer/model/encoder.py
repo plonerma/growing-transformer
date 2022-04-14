@@ -22,7 +22,7 @@ class GrowingEncoder(GrowingModule):
 
     def reset_grow_state(self) -> None:
         # in this case, it is layers not neurons
-        self.new_parts: Optional[torch.nn.Parameter] = None
+        self.step_size: Optional[torch.nn.Parameter] = None
 
         self._new_layers: ModuleList = ModuleList()
 
@@ -30,8 +30,8 @@ class GrowingEncoder(GrowingModule):
         for i, layer in enumerate(self.layer):
             x = layer(x, attention_mask=attention_mask)
 
-            if self.new_parts is not None:
-                x = self._new_layers[i](x, influence_factor=self.new_parts[i], attention_mask=attention_mask)
+            if self.step_size is not None:
+                x = self._new_layers[i](x, influence_factor=self.step_size[i], attention_mask=attention_mask)
         return x
 
     def _direction_params(self):
@@ -42,7 +42,7 @@ class GrowingEncoder(GrowingModule):
         new_layers = len(self.layer)
 
         step_size = self.config.layer_step_size
-        self.new_parts = Parameter(
+        self.step_size = Parameter(
             torch.ones(new_layers, device=growing_transformer.device) * step_size, requires_grad=False
         )
 
@@ -71,12 +71,12 @@ class GrowingEncoder(GrowingModule):
             self._new_layers.append(new_layer)
 
         self.train(self.training)
-        return self.new_parts.size()
+        return self.step_size.size()
 
     def degrow(self, selected):
         # sort in descending order, so we can add layers without fiddeling with indices
 
-        was_selected = torch.zeros(self.new_parts.size(), dtype=bool)
+        was_selected = torch.zeros(self.step_size.size(), dtype=bool)
         was_selected[selected] = True
 
         for i in torch.arange(was_selected.size(0) - 1, -1, -1):
@@ -85,7 +85,7 @@ class GrowingEncoder(GrowingModule):
                 layer = self._new_layers[i]
 
                 # permanently apply influence factor to layer
-                layer.apply_influence_factor(self.new_parts[i])
+                layer.apply_influence_factor(self.step_size[i])
 
                 # tmp variables can be cleared (now part of new layer)
                 self.layer[i].layer_norm._weight = None

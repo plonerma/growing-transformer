@@ -42,7 +42,7 @@ class GrowingMLP(GrowingModule):
 
     def reset_grow_state(self) -> None:
         # step size (used to calculate gradients for selecting kept neurons)
-        self.new_parts: Optional[torch.nn.Parameter] = None
+        self.step_size: Optional[torch.nn.Parameter] = None
 
         # update directions (to be trained)
         self._in_weight_split: Optional[torch.nn.Parameter] = None
@@ -75,16 +75,16 @@ class GrowingMLP(GrowingModule):
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         h = self.linear_in(x)
 
-        was_split = self.new_parts is not None and self._in_weight_split is not None
+        was_split = self.step_size is not None and self._in_weight_split is not None
 
         if was_split:
-            assert self.new_parts is not None
+            assert self.step_size is not None
             assert self._in_weight_split is not None
             assert self._in_bias_split is not None
 
             w_noise = (
                 torch.nn.functional.linear(x, self._in_weight_split, self._in_bias_split)
-                * self.new_parts[: self.hidden_features]
+                * self.step_size[: self.hidden_features]
             )
 
             h_plus = self.activation(h + w_noise)
@@ -96,8 +96,8 @@ class GrowingMLP(GrowingModule):
 
         y = self.linear_out(h)
 
-        if self.new_parts is not None:
-            num_novel = self.num_new_parts - was_split * self.hidden_features
+        if self.step_size is not None:
+            num_novel = self.num_step_size - was_split * self.hidden_features
 
             if num_novel > 0:
                 assert self._in_weight_novel is not None
@@ -105,7 +105,7 @@ class GrowingMLP(GrowingModule):
                 assert self._out_weight_novel is not None
 
                 h_novel = torch.nn.functional.linear(x, self._in_weight_novel, self._in_bias_novel)
-                y_novel = self.activation(h_novel) * self.new_parts[-num_novel:]
+                y_novel = self.activation(h_novel) * self.step_size[-num_novel:]
                 y_novel = torch.nn.functional.linear(y_novel, self._out_weight_novel)
                 y = y + y_novel
 
@@ -121,7 +121,7 @@ class GrowingMLP(GrowingModule):
         eps_novel_bias = self.config.eps_novel_bias
 
         # add parameter to measure influence/gradient of adding new neurons
-        self.new_parts = Parameter(
+        self.step_size = Parameter(
             torch.ones(self.hidden_features * split + num_novel, device=growing_transformer.device) * step_size,
             requires_grad=False,
         )
@@ -152,11 +152,11 @@ class GrowingMLP(GrowingModule):
             uniform_(self._out_weight_novel, -eps_novel_weight, eps_novel_weight)
             uniform_(self._in_bias_novel, -eps_novel_bias, eps_novel_bias)
 
-        return self.new_parts.size()
+        return self.step_size.size()
 
     def degrow(self, selected: torch.Tensor) -> None:
         with torch.no_grad():
-            assert self.new_parts is not None
+            assert self.step_size is not None
 
             num_old = self.hidden_features
 
@@ -188,14 +188,14 @@ class GrowingMLP(GrowingModule):
             if num_split > 0:
                 assert self._in_weight_split is not None
                 assert self._in_bias_split is not None
-                assert self.new_parts is not None
+                assert self.step_size is not None
 
-                weight_noise = self._in_weight_split[split] * self.new_parts[split, None]
+                weight_noise = self._in_weight_split[split] * self.step_size[split, None]
 
                 weight_in[split] = self.linear_in.weight[split] + weight_noise
                 weight_in[num_old : num_old + num_split] = self.linear_in.weight[split] - weight_noise
 
-                bias_noise = self._in_bias_split[split] * self.new_parts[split]
+                bias_noise = self._in_bias_split[split] * self.step_size[split]
 
                 bias_in[split] = self.linear_in.bias[split] + bias_noise
                 bias_in[num_old : num_old + num_split] = self.linear_in.bias[split] - bias_noise
@@ -212,7 +212,7 @@ class GrowingMLP(GrowingModule):
                 # copy new neurons
                 weight_in[num_old + num_split :] = self._in_weight_novel[novel]
                 bias_in[num_old + num_split :] = self._in_bias_novel[novel]
-                weight_out[:, num_old + num_split :] = self._out_weight_novel[:, novel] * self.new_parts[None, novel]
+                weight_out[:, num_old + num_split :] = self._out_weight_novel[:, novel] * self.step_size[None, novel]
 
             self.linear_in.weight = Parameter(weight_in)
             self.linear_in.bias = Parameter(bias_in)

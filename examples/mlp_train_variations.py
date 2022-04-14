@@ -57,7 +57,7 @@ for i, p in enumerate(grid):
     run_name = f"run_{i:04}"
     tensorboard_writer = SummaryWriter(f"runs/variations/{run_name}")
 
-    trainer = GrowingTrainer(model, tune_direction=True, tune_new_parts=True, selection_method="firefly")
+    trainer = GrowingTrainer(model, tune_direction=True, tune_step_size=True, selection_method="firefly")
 
     steps = list()
 

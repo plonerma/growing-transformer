@@ -44,7 +44,7 @@ class Growing(torch.nn.Module):
             if not isinstance(m, GrowingModule):
                 continue
 
-            p = m.new_parts
+            p = m.step_size
 
             if p is not None:
                 yield p
@@ -78,15 +78,15 @@ class Growing(torch.nn.Module):
 class GrowingModule(Growing):
     def __init__(self, config: GrowingConfig):
         super().__init__(config)
-        self.new_parts: Optional[torch.nn.Parameter] = None
+        self.step_size: Optional[torch.nn.Parameter] = None
 
     @property
-    def num_new_parts(self) -> int:
+    def num_step_size(self) -> int:
         """Return total number of neurons that were added."""
-        if self.new_parts is None:
+        if self.step_size is None:
             return 0
         else:
-            return self.new_parts.size(0)
+            return self.step_size.size(0)
 
     @abstractmethod
     def degrow(self, selected: torch.Tensor) -> None:
@@ -101,7 +101,7 @@ class GrowingModule(Growing):
         pass
 
     def select(self, k: int) -> torch.Tensor:
-        assert self.new_parts is not None
+        assert self.step_size is not None
 
         # return indices of neurons with largest absolute gradient
-        return torch.topk(self.new_parts * self.new_parts.grad, k).indices
+        return torch.topk(self.step_size * self.step_size.grad, k).indices

@@ -62,7 +62,7 @@ def main(cfg: Configuration):
     trainer = GrowingTrainer(
         model,
         tune_direction=cfg.training.tune_direction,
-        tune_new_parts=cfg.training.tune_new_parts,
+        tune_step_size=cfg.training.tune_step_size,
         selection_method=cfg.training.selection_method,
     )
 

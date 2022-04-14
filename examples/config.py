@@ -29,7 +29,7 @@ class Training:
     use_onecycle: bool
     growth_phases: int
     tune_direction: bool
-    tune_new_parts: bool
+    tune_step_size: bool
     selection_method: str
 
 
