@@ -22,14 +22,17 @@ class SegmentDataset(Dataset):
 
     def downsampled(self, proportion):
         """Subsample dataset."""
+        return self.split(proportion)[0]
+
+    def split(self, proportion):
+        """Split datset into two parts."""
         n_samples = len(self)
         indices = list(range(n_samples))
         random.shuffle(indices)
 
         # calculate new number of samples
         n_samples = round(proportion * n_samples)
-        # create new dataset
-        return Subset(self, indices[:n_samples])
+        return Subset(self, indices[:n_samples]), Subset(self, indices[n_samples:])
 
     def prepare_tokens(self, tokens):
         return self.tokenizer.prepare_for_model(

@@ -111,8 +111,6 @@ class GrowingAttention(GrowingModule):
         )
 
         # create update direction for weight and bias
-        self._output_weight = None
-
         self._value_weight = Parameter(
             torch.empty(self.heads * num_novel, self.d_model, device=growing_transformer.device), requires_grad=False
         )

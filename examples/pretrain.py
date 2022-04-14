@@ -44,6 +44,11 @@ def main(cfg: Configuration):
     if cfg.dataset.downsample < 1 - 1e-5:
         train_data = train_data.downsampled(cfg.dataset.downsample)
 
+    if cfg.training.grow_data_split > 0:
+        train_data, grow_data = train_data.split(cfg.training.grow_data_split)
+    else:
+        grow_data = MLMSegmenetDataset(corpus["validation"], tokenizer)
+
     test_data = MLMSegmenetDataset(corpus["test"], tokenizer)
 
     model: Union[GrowingMLMTransformer, HuggingfaceMLMTransformer]
@@ -67,8 +72,8 @@ def main(cfg: Configuration):
     )
 
     trainer.train(
-        train_data,
-        grow_data=train_data,
+        train_data=train_data,
+        grow_data=grow_data,
         schedule=schedule,
         test_data=test_data,
         tensorboard_writer=tensorboard_writer,

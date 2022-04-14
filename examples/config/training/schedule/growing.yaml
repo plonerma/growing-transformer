@@ -1,20 +1,36 @@
 tuning_weight_decay: 0.2
+training_epochs: 2
 
-growth_phase:
+tune_params:
+  direction:
+    weight_decay: ${training.schedule.tuning_weight_decay}
+  step_size:
+    weight_decay: ${training.schedule.tuning_weight_decay}
+
+growth_phase_a:
   - match: .mlp
     split: True
     num_novel: 16
     num_keep: 16
-    tune_params:
-      direction:
-        weight_decay: ${training.schedule.tuning_weight_decay}
-      step_size:
-        weight_decay: ${training.schedule.tuning_weight_decay}
+    tune_params: ${training.schedule.tune_params}
+  - match: .attention
+
+  - match: .dot_product
+    split: False  # splitting up key and query is equivalent to just adding new neurons
+    num_novel: 8
+    num_keep: 4
+    tune_params: ${training.schedule.tune_params}
+  - match: .encoder
+    split: True
+    num_novel: 0
+    num_keep: 1
+    tune_params: ${training.schedule.tune_params}
+
 
 
 steps:
   - train:
-      num_epochs: 2
+      num_epochs: ${training.schedule.training_epochs}
   - grow: ${training.schedule.growth_phase}
   - train:
       num_epochs: 2

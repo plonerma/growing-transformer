@@ -1,5 +1,5 @@
 defaults:
-  - schedule: static
+  - schedule: growing
 
 device: "cuda:0"
 learning_rate: 0.1
@@ -13,3 +13,4 @@ growth_phases: 0
 tune_direction: True
 tune_step_size: True
 selection_method: "firefly"
+grow_data_split: 0.1

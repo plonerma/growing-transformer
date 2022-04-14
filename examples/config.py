@@ -31,6 +31,7 @@ class Training:
     tune_direction: bool
     tune_step_size: bool
     selection_method: str
+    grow_data_split: float
 
 
 @dataclass
