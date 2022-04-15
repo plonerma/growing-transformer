@@ -2,10 +2,15 @@ import logging
 import re
 import time
 from contextlib import contextmanager
-from typing import Optional
+from typing import Mapping, Optional
 
 import torch
+
+# https://github.com/pytorch/pytorch/issues/39009
+from torch.optim.lr_scheduler import OneCycleLR  # type: ignore
 from torch.utils.data import DataLoader
+
+import growing_transformer
 
 from .base import BaseTrainer
 from .schedule import GrowthSchedule
@@ -36,7 +41,14 @@ class GrowingTrainer(BaseTrainer):
         tensorboard_writer=None,
         index=None,
         batch_size: int = 32,
+        gca_batches: int = 1,
+        lr: float = 1e-3,
+        momentum: float = 0.1,
+        alpha: float = 0.9,
+        use_onecycle: int = 1,
+        num_epochs: int = 1,
         shuffle=True,
+        weight_decay: float = 0,
         num_workers: Optional[int] = None,
     ):
         log.info("Growing model")
@@ -65,9 +77,18 @@ class GrowingTrainer(BaseTrainer):
 
             log.info(f"Matched {num_matched} to {pattern_str} ({conf}).")
 
+        self.model.to(growing_transformer.device)
+
         # === Tune direction and step sizes ===
         if self._tune_direction or self._tune_step_size:
             assert grow_data is not None
+
+            tuned_str = []
+            if self._tune_direction:
+                tuned_str.append("direction")
+            if self._tune_step_size:
+                tuned_str.append("step_size")
+            log.info(f"Tuning {' and '.join(tuned_str)}")
 
             param_groups = list()
             relevant_params = list()
@@ -76,34 +97,63 @@ class GrowingTrainer(BaseTrainer):
                 kw = conf.get("tune_params", dict())
 
                 if self._tune_direction:
-                    params = list(m.direction_params())
+                    params = [p for p in m._direction_params() if p is not None]
                     param_groups.append({"params": params, **kw.get("direction", dict())})
                     relevant_params += params
                 if self._tune_step_size:
-                    params = list(m.step_size_params())
+                    params = [m.step_size]
                     param_groups.append({"params": params, **kw.get("step_size", dict())})
                     relevant_params += params
 
-            optimizer = torch.optim.RMSprop(param_groups, lr=1e-3, momentum=0.1, alpha=0.9)
+            optimizer = torch.optim.RMSprop(
+                param_groups, lr=lr, momentum=momentum, alpha=alpha, weight_decay=weight_decay
+            )
+
+            if use_onecycle:
+                num_steps = len(grow_data) // (batch_size * gca_batches) + 1
+
+                scheduler = OneCycleLR(
+                    optimizer, steps_per_epoch=num_steps, pct_start=0.1, epochs=num_epochs, max_lr=lr
+                )
+            else:
+                scheduler = None
+
+            log.info(f"Tuning for {num_epochs} epochs.")
 
             with self.some_grad_only(*params):
-                batch_loader = DataLoader(
-                    grow_data,
-                    batch_size=batch_size,
-                    shuffle=shuffle,
-                    num_workers=0 if num_workers is None else num_workers,
-                )
+                for epoch in range(num_epochs):
+                    batch_loader = DataLoader(
+                        grow_data,
+                        batch_size=batch_size,
+                        shuffle=shuffle,
+                        num_workers=0 if num_workers is None else num_workers,
+                    )
 
-                for batch in batch_loader:
-                    optimizer.zero_grad()
+                    for i, batch in enumerate(batch_loader):
+                        tune_step = epoch * len(batch_loader) + i
 
-                    loss = self.model.forward_loss(batch)
-                    loss.backward()
-                    optimizer.step()
+                        optimizer.zero_grad()
+
+                        loss = self.model.forward_loss(batch)
+                        loss.backward()
+
+                        if tensorboard_writer is not None:
+                            tensorboard_writer.add_scalar(f"tuning directions and steps/step {index}", loss, tune_step)
+
+                        if (i + 1) % gca_batches == 0:
+
+                            optimizer.step()
+
+                            if scheduler is not None:
+                                scheduler.step()
+
+                            optimizer.zero_grad()
+
+        log.info(f"Selecting neurons to keep using {self._selection_method }")
 
         # === Select neurons ===
         if self._selection_method == "firefly":
-            self.calculate_new_gradient(grow_data)
+            self.calculate_step_gradient(grow_data)
 
             for m, size, conf in grown_modules:
                 num_kept_parts = conf["num_keep"]
@@ -143,6 +193,7 @@ class GrowingTrainer(BaseTrainer):
         propagate_interrupt=False,
         tensorboard_writer=None,
         log_training_info=True,
+        grow_tune_params: Mapping = {},
         **kw,
     ):
         if log_training_info:
@@ -156,17 +207,20 @@ class GrowingTrainer(BaseTrainer):
         current_epoch = 0
         train_info = None
 
+        self.model.to(growing_transformer.device)
+
         for step_index, (step_type, step_params) in enumerate(schedule):
             if step_type == step_type.grow:
+                grow_params = {"batch_size": batch_size, "shuffle": shuffle, **grow_tune_params}
+
                 grow_start = time.time()
                 self.grow_model(
                     step_params,
                     grow_data=grow_data,
                     tensorboard_writer=tensorboard_writer,
                     index=step_index,
-                    batch_size=batch_size,
-                    shuffle=shuffle,
                     num_workers=num_workers,
+                    **grow_params,
                 )
                 grow_end = time.time()
 
@@ -225,7 +279,7 @@ class GrowingTrainer(BaseTrainer):
         for p, rg in zip(self.model.parameters(), _requires_grad):
             p.requires_grad = rg
 
-    def calculate_new_gradient(
+    def calculate_step_gradient(
         self, train_data, batch_size: int = 32, shuffle: bool = True, num_workers: Optional[int] = None
     ):
 

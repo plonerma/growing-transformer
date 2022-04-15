@@ -84,9 +84,11 @@ def main(cfg: Configuration):
         eps=cfg.training.eps,
         weight_decay=cfg.training.weight_decay,
         use_onecycle=cfg.training.use_onecycle,
+        grow_tune_params=cfg.training.grow_tune_params,
     )
 
-    torch.save(model.state_dict(), "trained_model.pt")
+    if cfg.save_model:
+        torch.save(model.state_dict(), "trained_model.pt")
 
 
 if __name__ == "__main__":

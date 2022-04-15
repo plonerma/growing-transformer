@@ -1,0 +1,20 @@
+# @package _global_
+
+defaults:
+  - override /dataset: wiki_small
+  - override /training: growing
+
+model:
+  type: growing
+  config:
+    loss_on_all_tokens: True
+    intermediate_size: 2816
+    num_hidden_layers: 11
+    d_head: 56
+
+training:
+  schedule:
+    steps:
+      - grow: ${training.schedule.growth_phase_b}
+
+save_model: False

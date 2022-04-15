@@ -3,3 +3,5 @@ defaults:
   - dataset: wiki_big
   - model: static
   - training: static
+
+save_model: True

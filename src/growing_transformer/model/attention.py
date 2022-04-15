@@ -130,18 +130,20 @@ class GrowingAttention(GrowingModule):
     def degrow(self, selected: Tensor) -> None:
         with torch.no_grad():
 
-            if selected.size(0) == 0:
+            selected = selected.reshape(self.heads, -1)
+
+            if selected.numel() == 0:
                 self.reset_grow_state()
                 return
 
-            assert selected.size(0) % self.heads == 0
+            assert selected.size(0) == self.heads
 
             assert self.step_size is not None
             assert self._value_weight is not None
             assert self._value_bias is not None
             assert self._output_weight is not None
 
-            d_new = selected.size(0) // self.heads
+            d_new = selected.size(1)
 
             value_weight = torch.empty(self.heads, self.d_head + d_new, self.d_model, device=growing_transformer.device)
             value_bias = torch.empty(self.heads, self.d_head + d_new, device=growing_transformer.device)
@@ -161,7 +163,7 @@ class GrowingAttention(GrowingModule):
             selected_steps = self.step_size.view(-1)[selected].view(self.heads, -1)
 
             value_weight[:, self.d_head :, :] = (
-                self._value_weight.view(-1, self.d_model)[selected].view(self.heads, -1, self.d_model)
+                self._value_weight.view(-1, self.d_model)[selected, :].view(self.heads, -1, self.d_model)
                 * selected_steps[:, :, None]
             )
             value_bias[:, self.d_head :] = self._value_bias.view(-1)[selected].view(self.heads, -1) * selected_steps
@@ -286,7 +288,9 @@ class ScaledDotProductAttention(GrowingModule):
             assert self._weight is not None
             assert self._bias is not None
 
-            d_new = selected.size(0) // self.heads
+            selected = selected.reshape(self.heads, -1)
+
+            d_new = selected.size(1)
 
             q_weight = torch.empty(self.heads, self.d_head + d_new, self.in_features, device=growing_transformer.device)
 

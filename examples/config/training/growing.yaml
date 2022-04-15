@@ -14,3 +14,11 @@ tune_direction: True
 tune_step_size: True
 selection_method: "firefly"
 grow_data_split: 0.1
+grow_tune_params:
+  batch_size: 64
+  gca_batches: 4
+  use_onecycle: True
+  lr: 1e-3
+  momentum: 0.1
+  alpha: 0.9
+  weight_decay: 0.2

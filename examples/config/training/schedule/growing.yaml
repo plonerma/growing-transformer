@@ -1,36 +1,71 @@
-tuning_weight_decay: 0.2
 training_epochs: 2
-
-tune_params:
-  direction:
-    weight_decay: ${training.schedule.tuning_weight_decay}
-  step_size:
-    weight_decay: ${training.schedule.tuning_weight_decay}
 
 growth_phase_a:
   - match: .mlp
     split: True
-    num_novel: 16
-    num_keep: 16
-    tune_params: ${training.schedule.tune_params}
+    num_novel: 265
+    num_keep: 256
   - match: .attention
-
+    # since there is no activation function bewtween the value and output layer
+    # the split direction would just cancel out
+    split: False
+    num_novel: 16
+    num_keep: 4
   - match: .dot_product
     split: False  # splitting up key and query is equivalent to just adding new neurons
-    num_novel: 8
+    num_novel: 16
     num_keep: 4
-    tune_params: ${training.schedule.tune_params}
   - match: .encoder
     split: True
     num_novel: 0
     num_keep: 1
-    tune_params: ${training.schedule.tune_params}
+
+growth_phase_b:
+  - match: .mlp
+    split: True
+    num_novel: 265
+    num_keep: 256
+  - match: .attention
+    # since there is no activation function bewtween the value and output layer
+    # the split direction would just cancel out
+    split: False
+    num_novel: 32
+    num_keep: 8
+  - match: .dot_product
+    split: False  # splitting up key and query is equivalent to just adding new neurons
+    num_novel: 32
+    num_keep: 8
+  - match: .encoder
+    split: True
+    num_novel: 0
+    num_keep: 1
 
 
 
 steps:
   - train:
       num_epochs: ${training.schedule.training_epochs}
-  - grow: ${training.schedule.growth_phase}
+  - grow: ${training.schedule.growth_phase_a}
   - train:
-      num_epochs: 2
+      num_epochs: ${training.schedule.training_epochs}
+  - grow: ${training.schedule.growth_phase_a}
+  - train:
+      num_epochs: ${training.schedule.training_epochs}
+  - grow: ${training.schedule.growth_phase_a}
+  - train:
+      num_epochs: ${training.schedule.training_epochs}
+  - grow: ${training.schedule.growth_phase_a}
+  - train:
+      num_epochs: ${training.schedule.training_epochs}
+  - grow: ${training.schedule.growth_phase_b}
+  - train:
+      num_epochs: ${training.schedule.training_epochs}
+  - grow: ${training.schedule.growth_phase_b}
+  - train:
+      num_epochs: ${training.schedule.training_epochs}
+  - grow: ${training.schedule.growth_phase_b}
+  - train:
+      num_epochs: ${training.schedule.training_epochs}
+  - grow: ${training.schedule.growth_phase_b}
+  - train:
+      num_epochs: ${training.schedule.training_epochs}

@@ -32,6 +32,7 @@ class Training:
     tune_step_size: bool
     selection_method: str
     grow_data_split: float
+    grow_tune_params: Dict
 
 
 @dataclass
@@ -39,3 +40,4 @@ class Configuration:
     dataset: Dataset
     model: Model
     training: Training
+    save_model: bool
