@@ -1,0 +1,10 @@
+# @package _global_
+
+defaults:
+  - override /dataset: wiki_big
+  - override /model: grow_start
+  - override /training: growing
+
+training:
+  schedule:
+    training_epochs: 3

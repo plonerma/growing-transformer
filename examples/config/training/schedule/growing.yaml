@@ -69,3 +69,6 @@ steps:
   - grow: ${training.schedule.growth_phase_b}
   - train:
       num_epochs: ${training.schedule.training_epochs}
+  - grow: ${training.schedule.growth_phase_b}
+  - train:
+      num_epochs: ${training.schedule.training_epochs}
