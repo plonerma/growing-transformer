@@ -12,15 +12,15 @@ log.setLevel(logging.DEBUG)
 
 
 class GrowingTest:
-    num_batches = 16
-    length = 32
-    d_model = 64
+    num_batches = 17
+    length = 29
+    d_model = 35
 
     base_config = dict(
         hidden_act="gelu",
         d_model=d_model,
-        num_heads=4,
-        d_head=16,
+        num_heads=5,
+        d_head=7,
         intermediate_size=128,
         bert_like_state_dict=True,
         num_hidden_layers=1,
