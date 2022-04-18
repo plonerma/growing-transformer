@@ -5,7 +5,7 @@ growth_phase_a:
     split: True
     num_novel: 265
     num_keep: 256
-  - match: .attention
+  - match: .attention.output
     # since there is no activation function bewtween the value and output layer
     # the split direction would just cancel out
     split: False
@@ -15,10 +15,21 @@ growth_phase_a:
     split: False  # splitting up key and query is equivalent to just adding new neurons
     num_novel: 16
     num_keep: 4
+  - match: .attention
+    split: False
+    num_novel: 4
+    num_keep: 1
+  # grow heads second to last
+  - match: .layer.[0-9]+
+    split: False
+    num_novel: 4
+    num_keep: 1
+  # encoder should be grown last, so that new layers are not grown (otherwise there are conflicts)
   - match: .encoder
     split: True
     num_novel: 0
     num_keep: 1
+
 
 growth_phase_b:
   - match: .mlp
@@ -35,10 +46,15 @@ growth_phase_b:
     split: False  # splitting up key and query is equivalent to just adding new neurons
     num_novel: 32
     num_keep: 8
+  - match: .layer.[0-9]+
+    split: False
+    num_novel: 4
+    num_keep: 1
   - match: .encoder
     split: True
     num_novel: 0
     num_keep: 1
+
 
 
 

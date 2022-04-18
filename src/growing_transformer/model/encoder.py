@@ -42,9 +42,7 @@ class GrowingEncoder(GrowingModule):
         new_layers = len(self.layer)
 
         step_size = self.config.layer_step_size
-        self.step_size = Parameter(
-            torch.ones(new_layers, device=growing_transformer.device) * step_size, requires_grad=False
-        )
+        self.step_size = Parameter(torch.ones(new_layers, device=growing_transformer.device) * step_size)
 
         self._new_layers = torch.nn.ModuleList()
 
@@ -57,8 +55,8 @@ class GrowingEncoder(GrowingModule):
             uniform_(new_layer.mlp.linear_out.weight, -eps_weight, eps_weight)
             uniform_(new_layer.mlp.linear_out.bias, -eps_bias, eps_bias)
 
-            uniform_(new_layer.attention.output_linear.weight, -eps_weight, eps_weight)
-            uniform_(new_layer.attention.output_linear.bias, -eps_bias, eps_bias)
+            uniform_(new_layer.attention.output.output_linear.weight, -eps_weight, eps_weight)
+            uniform_(new_layer.attention.output.output_linear.bias, -eps_bias, eps_bias)
 
             new_layer.layer_norm.weight.data = prev_layer.layer_norm.weight
             new_layer.layer_norm.bias.data = prev_layer.layer_norm.bias
@@ -108,5 +106,6 @@ class GrowingEncoder(GrowingModule):
         # set training flag of all new modules to own state
         self.train(self.training)
 
+    def update_config(self, num_added: int):
         # set config
-        self.config.num_hidden_layers = len(self.layer)
+        self.config.num_hidden_layers = len(self.layer) + num_added

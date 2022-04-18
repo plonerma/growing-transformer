@@ -1,4 +1,4 @@
-from typing import Iterable, Optional, Tuple, Union
+from typing import Iterable, List, Optional, Tuple, Union
 
 import torch
 from torch import Tensor
@@ -7,32 +7,20 @@ from torch.nn.init import uniform_
 
 import growing_transformer
 
-from ..configuration import GrowingConfig
+from ..configuration import GrowingConfig, first_not_none
 from .base import GrowingModule
 
 
-class GrowingAttention(GrowingModule):
-    _bert_state_dict_map = {
-        "self.query": "dot_product.query_linear",
-        "self.key": "dot_product.key_linear",
-        "self.value": "value_linear",
-        "output.dense": "output_linear",
-        "output.LayerNorm": "layer_norm",
-    }
-
-    def __init__(self, config: GrowingConfig):
+class AttentionOutput(GrowingModule):
+    def __init__(self, config: GrowingConfig, heads: int = None, bias=True):
         super().__init__(config=config)
 
-        self.heads = config.num_attention_heads
+        self.heads = first_not_none(heads, config.num_attention_heads)
         self.d_head = config.d_head_v
         self.d_model = config.d_model
 
-        self.dot_product = ScaledDotProductAttention(config=config)
-
         self.value_linear = Linear(self.d_model, self.heads * self.d_head)
-        self.output_linear = Linear(self.heads * self.d_head, self.d_model)
-
-        self.layer_norm = LayerNorm(self.d_model, eps=config.layer_norm_eps)
+        self.output_linear = Linear(self.heads * self.d_head, self.d_model, bias=bias)
 
         self.reset_grow_state()
         self.to(growing_transformer.device)
@@ -42,11 +30,11 @@ class GrowingAttention(GrowingModule):
         self.step_size = None
 
         # update directions (to be trained) after growing
-        self._value_weight: Optional[torch.nn.Parameter] = None
-        self._value_bias: Optional[torch.nn.Parameter] = None
-        self._output_weight: Optional[torch.nn.Parameter] = None
+        self._value_weight: Optional[Parameter] = None
+        self._value_bias: Optional[Parameter] = None
+        self._output_weight: Optional[Parameter] = None
 
-    def _direction_params(self) -> Iterable[Optional[torch.nn.Parameter]]:
+    def _direction_params(self) -> Iterable[Optional[Parameter]]:
         return [
             self._value_weight,
             self._value_bias,
@@ -60,13 +48,9 @@ class GrowingAttention(GrowingModule):
     def forward(
         self,
         x: Tensor,
-        return_attention: bool = False,
-        influence_factor=1.0,
-        attention_mask: Optional[Tensor] = None,
+        attention: Tensor,
     ) -> Union[Tensor, Tuple[Tensor, Tensor]]:
         batch, length, _ = x.size()
-
-        attention = self.dot_product(x, attention_mask=attention_mask)
 
         value = self.value_linear(x).view(batch, length, self.heads, self.d_head)
 
@@ -92,13 +76,7 @@ class GrowingAttention(GrowingModule):
 
             out += out_novel
 
-        out = out * influence_factor
-        out = self.layer_norm(x + out)
-
-        if not return_attention:
-            return out
-        else:
-            return out, attention
+        return out
 
     def grow(self, num_novel: int = 0, split: bool = False) -> torch.Size:
         step_size = self.config.step_size
@@ -106,19 +84,15 @@ class GrowingAttention(GrowingModule):
         eps_novel_bias = self.config.eps_novel_bias
 
         # add parameter to measure influence/gradient of adding new neurons
-        self.step_size = Parameter(
-            torch.ones(self.heads, num_novel, device=growing_transformer.device) * step_size, requires_grad=False
-        )
+        self.step_size = Parameter(torch.ones(self.heads, num_novel, device=growing_transformer.device) * step_size)
 
         # create update direction for weight and bias
         self._value_weight = Parameter(
-            torch.empty(self.heads * num_novel, self.d_model, device=growing_transformer.device), requires_grad=False
+            torch.empty(self.heads * num_novel, self.d_model, device=growing_transformer.device)
         )
-        self._value_bias = Parameter(
-            torch.empty(self.heads * num_novel, device=growing_transformer.device), requires_grad=False
-        )
+        self._value_bias = Parameter(torch.empty(self.heads * num_novel, device=growing_transformer.device))
         self._output_weight = Parameter(
-            torch.empty(self.d_model, self.heads * num_novel, device=growing_transformer.device), requires_grad=False
+            torch.empty(self.d_model, self.heads * num_novel, device=growing_transformer.device)
         )
 
         uniform_(self._value_weight, -eps_novel_weight, eps_novel_weight)
@@ -174,24 +148,29 @@ class GrowingAttention(GrowingModule):
 
             self.d_head = self.d_head + d_new
 
-            self.value_linear.weight = torch.nn.Parameter(value_weight.reshape(self.heads * self.d_head, self.d_model))
-            self.value_linear.bias = torch.nn.Parameter(value_bias.reshape(self.heads * self.d_head))
-            self.output_linear.weight = torch.nn.Parameter(
-                output_weight.reshape(self.d_model, self.heads * self.d_head)
-            )
+            self.value_linear.weight = Parameter(value_weight.reshape(self.heads * self.d_head, self.d_model))
+            self.value_linear.bias = Parameter(value_bias.reshape(self.heads * self.d_head))
+            self.output_linear.weight = Parameter(output_weight.reshape(self.d_model, self.heads * self.d_head))
 
         self.reset_grow_state()
-        self.config.d_head_v = self.d_head
+
+    def update_config(self, num_added: int):
+        self.config.d_head_v = self.d_head + num_added
 
 
 class ScaledDotProductAttention(GrowingModule):
-    def __init__(self, config: GrowingConfig):
+    """Calculates attention matrix from query and key."""
+
+    def __init__(self, config: GrowingConfig, heads: int = None):
         super().__init__(config=config)
 
-        self.heads = config.num_attention_heads
+        self.heads = first_not_none(heads, config.num_attention_heads)
+
         self.d_head = config.d_head_kq
-        self.query_linear = torch.nn.Linear(config.d_model, self.heads * self.d_head)
-        self.key_linear = torch.nn.Linear(config.d_model, self.heads * self.d_head)
+
+        self.query_linear: Linear = Linear(config.d_model, self.heads * self.d_head)
+
+        self.key_linear: Linear = Linear(config.d_model, self.heads * self.d_head)
         self.reset_grow_state()
         self.to(growing_transformer.device)
 
@@ -200,10 +179,10 @@ class ScaledDotProductAttention(GrowingModule):
         self.step_size = None
 
         # update directions (to be trained)
-        self._weight: Optional[torch.nn.Parameter] = None
-        self._bias: Optional[torch.nn.Parameter] = None
+        self._weight: Optional[Parameter] = None
+        self._bias: Optional[Parameter] = None
 
-    def _direction_params(self) -> Iterable[Optional[torch.nn.Parameter]]:
+    def _direction_params(self) -> Iterable[Optional[Parameter]]:
         return [
             self._weight,
             self._bias,
@@ -260,16 +239,16 @@ class ScaledDotProductAttention(GrowingModule):
         eps_novel_bias = self.config.eps_novel_bias
 
         # add parameter to measure influence/gradient of adding new neurons
-        self.step_size = torch.nn.Parameter(
+        self.step_size = Parameter(
             torch.ones(self.heads, num_novel, device=growing_transformer.device) * step_size, requires_grad=False
         )
 
         # create update direction for weight and bias
-        self._weight = torch.nn.Parameter(
+        self._weight = Parameter(
             torch.empty(2, self.heads * num_novel, self.d_model, device=growing_transformer.device), requires_grad=False
         )
 
-        self._bias = torch.nn.Parameter(
+        self._bias = Parameter(
             torch.empty(2, self.heads * num_novel, device=growing_transformer.device), requires_grad=False
         )
 
@@ -302,10 +281,10 @@ class ScaledDotProductAttention(GrowingModule):
 
             # copy old neurons
 
-            q_weight[:, : self.d_head] = self.query_linear.weight.view(self.heads, self.d_head, self.d_model)
-            k_weight[:, : self.d_head] = self.key_linear.weight.view(self.heads, self.d_head, self.d_model)
-            q_bias[:, : self.d_head] = self.query_linear.bias.view(self.heads, self.d_head)
-            k_bias[:, : self.d_head] = self.key_linear.bias.view(self.heads, self.d_head)
+            q_weight[:, : self.d_head] = self.query_linear.weight.data.view(self.heads, self.d_head, self.d_model)
+            k_weight[:, : self.d_head] = self.key_linear.weight.data.view(self.heads, self.d_head, self.d_model)
+            q_bias[:, : self.d_head] = self.query_linear.bias.data.view(self.heads, self.d_head)
+            k_bias[:, : self.d_head] = self.key_linear.bias.data.view(self.heads, self.d_head)
 
             # copy new neurons
             selected_steps = self.step_size.view(-1)[selected].view(self.heads, -1)
@@ -332,10 +311,196 @@ class ScaledDotProductAttention(GrowingModule):
 
             self.d_head = self.d_head + d_new
 
-            self.query_linear.weight = torch.nn.Parameter(q_weight.reshape(self.heads * self.d_head, self.d_model))
-            self.key_linear.weight = torch.nn.Parameter(k_weight.reshape(self.heads * self.d_head, self.d_model))
-            self.query_linear.bias = torch.nn.Parameter(q_bias.reshape(self.heads * self.d_head))
-            self.key_linear.bias = torch.nn.Parameter(k_bias.reshape(self.heads * self.d_head))
+            self.query_linear.weight = Parameter(q_weight.reshape(self.heads * self.d_head, self.d_model))
+            self.key_linear.weight = Parameter(k_weight.reshape(self.heads * self.d_head, self.d_model))
+            self.query_linear.bias = Parameter(q_bias.reshape(self.heads * self.d_head))
+            self.key_linear.bias = Parameter(k_bias.reshape(self.heads * self.d_head))
 
         self.reset_grow_state()
-        self.config.d_head_kq = self.d_head
+
+    def update_config(self, num_added: int):
+        self.config.d_head_kq = self.d_head + num_added
+
+
+class GrowingAttention(GrowingModule):
+    _bert_state_dict_map = {
+        "self.query": "dot_product.query_linear",
+        "self.key": "dot_product.key_linear",
+        "self.value": "output.value_linear",
+        "output.dense": "output.output_linear",
+        "output.LayerNorm": "layer_norm",
+    }
+
+    def __init__(self, config):
+        super().__init__(config=config)
+
+        self.heads = config.num_attention_heads
+        self.d_model = config.d_model
+
+        self.dot_product = ScaledDotProductAttention(config=config)
+        self.output = AttentionOutput(config=config)
+        self.layer_norm = LayerNorm(self.d_model, eps=config.layer_norm_eps)
+
+        self.reset_grow_state()
+        self.to(growing_transformer.device)
+
+    def forward(
+        self,
+        x: Tensor,
+        return_attention: bool = False,
+        influence_factor: float = None,
+        attention_mask: Optional[Tensor] = None,
+    ) -> Union[Tensor, Tuple[Tensor, Tensor]]:
+
+        attention = self.dot_product(x, attention_mask=attention_mask)
+
+        out = self.output(x, attention=attention)
+
+        if self.step_size is not None:
+            assert self._new_dot_product is not None
+            assert self._new_output is not None
+
+            new_attention = self._new_dot_product(x, attention_mask=attention_mask)
+
+            new_attention = self.step_size.reshape(1, -1, 1, 1) * new_attention
+
+            out += self._new_output(x, new_attention)
+
+        if influence_factor is not None:
+            out = out * influence_factor
+
+        out = self.layer_norm(out + x)
+
+        if not return_attention:
+            return out
+        else:
+            return out, attention
+
+    def reset_grow_state(self) -> None:
+        # step size (used to calculate gradients for selecting kept heads)
+        self.step_size = None
+
+        # update directions (to be trained) after growing
+        self._new_dot_product: Optional[ScaledDotProductAttention] = None
+        self._new_output: Optional[AttentionOutput] = None
+
+    def _direction_params(self) -> Iterable[Optional[Parameter]]:
+        params: List[Parameter] = []
+
+        if self._new_dot_product is not None:
+            params += list(self._new_dot_product.parameters())
+
+        if self._new_output is not None:
+            params += list(self._new_output.parameters())
+
+        return params
+
+    def grow(self, num_novel: int = 0, split: bool = False) -> torch.Size:
+        if num_novel > 0:
+            step_size = self.config.step_size
+            self.step_size = Parameter(
+                torch.ones(num_novel, device=growing_transformer.device) * step_size,
+            )
+
+            self._new_dot_product = ScaledDotProductAttention(config=self.config, heads=num_novel)
+            self._new_output = AttentionOutput(config=self.config, heads=num_novel, bias=False)
+
+            eps_weight = self.config.eps_novel_weight
+            uniform_(self._new_output.output_linear.weight, -eps_weight, eps_weight)
+
+            return self.step_size.size()
+        else:
+            return torch.Size()
+
+    def degrow(self, selected: torch.Tensor) -> None:
+        # join old modules and selected heads of new modules together
+
+        if self.step_size is None:
+            return
+
+        if selected.size(0) == 0:
+            self.reset_grow_state()
+            return
+
+        assert self._new_dot_product is not None
+        assert self._new_output is not None
+
+        def concat_weights(a: Tensor, b: Tensor, out=False):
+            if out:
+                a, b = a.T, b.T
+
+            a = a.reshape(self.heads, -1, self.d_model)
+            b = b.reshape(-1, a.size(1), self.d_model)
+            b = b[selected]
+            ab = torch.cat([a, b], dim=0)
+
+            ab = ab.reshape(-1, self.d_model)
+
+            if out:
+                ab = ab.T
+
+            return Parameter(ab)
+
+        # adjust dot product
+        self.dot_product.query_linear.weight = concat_weights(
+            self.dot_product.query_linear.weight,
+            self._new_dot_product.query_linear.weight,
+        )
+
+        self.dot_product.query_linear.bias = Parameter(
+            torch.cat([self.dot_product.query_linear.bias, self._new_dot_product.query_linear.bias], dim=0)
+        )
+
+        self.dot_product.query_linear.out_features = self.dot_product.query_linear.bias.size(0)
+
+        self.dot_product.key_linear.weight = concat_weights(
+            self.dot_product.key_linear.weight,
+            self._new_dot_product.key_linear.weight,
+        )
+
+        self.dot_product.key_linear.bias = Parameter(
+            torch.cat([self.dot_product.key_linear.bias, self._new_dot_product.key_linear.bias], dim=0)
+        )
+
+        self.dot_product.key_linear.out_features = self.dot_product.key_linear.bias.size(0)
+
+        # adjust output
+
+        a = self.output.value_linear.weight
+        b = self._new_output.value_linear.weight
+
+        a = a.reshape(self.heads, -1, self.d_model)
+        b = b.reshape(-1, a.size(1), self.d_model)
+
+        b = b * self.step_size.reshape(-1, 1, 1)
+
+        b = b[selected]
+
+        self.output.value_linear.weight = Parameter(torch.cat([a, b], dim=0).reshape(-1, self.d_model))
+
+        a = self.output.value_linear.bias
+        b = self._new_output.value_linear.bias
+
+        a = a.reshape(self.heads, -1)
+        b = b.reshape(-1, a.size(1))
+
+        b = b * self.step_size.reshape(-1, 1)
+
+        b = b[selected, :]
+
+        self.output.value_linear.bias = Parameter(torch.cat([a, b], dim=0).reshape(-1))
+
+        self.output.value_linear.out_features = self.output.value_linear.bias.size(0)
+
+        self.output.output_linear.weight = concat_weights(
+            self.output.output_linear.weight, self._new_output.output_linear.weight, out=True
+        )
+
+        self.heads = self.heads + selected.size(0)
+        self.dot_product.heads = self.heads
+        self.output.heads = self.heads
+
+        self.reset_grow_state()
+
+    def update_config(self, num_added: int):
+        self.config.num_attention_heads = self.heads + num_added

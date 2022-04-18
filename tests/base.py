@@ -159,9 +159,15 @@ class GrowingTest:
         if isinstance(model, GrowingModule):
             modules = [model]
         else:
-            modules = list(model.growing_modules())
+            modules = list(reversed(list(model.growing_modules())))
 
-        sizes: List[torch.Size] = [m.grow(**kw) for m in modules]
+        sizes: List[torch.Size] = list()
+
+        for m in modules:
+            size = m.grow(**kw)
+            sizes.append(size)
+            if len(size) > 0:
+                m.update_config(size[-1])
 
         y_a = model(x)
 
@@ -200,12 +206,14 @@ class GrowingTest:
         if isinstance(model, GrowingModule):
             modules = [model]
         else:
-            modules = list(model.growing_modules())
+            modules = list(reversed(list(model.growing_modules())))
 
-        sizes: List[torch.Size] = [m.grow(**kw) for m in modules]
+        for m in modules:
+            m.grow(**kw)
+            m.update_config(0)
 
         # degrow deleting all recently grown neurons
-        for m, size in zip(modules, sizes):
+        for m in modules:
             m.degrow(torch.arange(0))
 
         y_b = model(x)

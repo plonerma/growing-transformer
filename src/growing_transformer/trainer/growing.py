@@ -73,6 +73,10 @@ class GrowingTrainer(BaseTrainer):
                 if re.search(pattern, name) is not None:
                     size = m.grow(num_novel=num_novel, split=split)
                     grown_modules.append((m, size, conf))
+
+                    # already update config, so that it will be correct for newly added modules (eg. layers)
+                    m.update_config(conf["num_keep"])
+
                     num_matched += 1
 
             log.info(f"Matched {num_matched} to {pattern_str} ({conf}).")

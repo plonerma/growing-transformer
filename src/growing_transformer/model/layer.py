@@ -42,5 +42,5 @@ class GrowingLayer(Growing):
     def apply_influence_factor(self, f):
         self.mlp.linear_out.weight.data *= f
         self.mlp.linear_out.bias.data *= f
-        self.attention.output_linear.weight.data *= f
-        self.attention.output_linear.bias.data *= f
+        self.attention.output.output_linear.weight.data *= f
+        self.attention.output.output_linear.bias.data *= f

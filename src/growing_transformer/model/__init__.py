@@ -1,4 +1,4 @@
-from .attention import GrowingAttention, ScaledDotProductAttention
+from .attention import AttentionOutput, GrowingAttention, ScaledDotProductAttention
 from .base import Growing, GrowingModule
 from .encoder import GrowingEncoder
 from .huggingface_transformer import HuggingfaceMLMTransformer
@@ -12,6 +12,7 @@ __all__ = [
     "GrowingTransformer",
     "GrowingMLMTransformer",
     "GrowingAttention",
+    "AttentionOutput",
     "ScaledDotProductAttention",
     "GrowingEncoder",
     "GrowingLayer",

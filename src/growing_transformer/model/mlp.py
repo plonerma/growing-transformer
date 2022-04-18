@@ -122,32 +122,26 @@ class GrowingMLP(GrowingModule):
 
         # add parameter to measure influence/gradient of adding new neurons
         self.step_size = Parameter(
-            torch.ones(self.hidden_features * split + num_novel, device=growing_transformer.device) * step_size,
-            requires_grad=False,
+            torch.ones(self.hidden_features * split + num_novel, device=growing_transformer.device) * step_size
         )
 
         # create update direction for weight and bias
         if split:
             self._in_weight_split = Parameter(
                 torch.empty(self.hidden_features, self.in_features, device=growing_transformer.device),
-                requires_grad=False,
             )
-            self._in_bias_split = Parameter(
-                torch.empty(self.hidden_features, device=growing_transformer.device), requires_grad=False
-            )
+            self._in_bias_split = Parameter(torch.empty(self.hidden_features, device=growing_transformer.device))
             uniform_(self._in_weight_split, -eps_split_weight, eps_split_weight)
             uniform_(self._in_bias_split, -eps_split_bias, eps_split_bias)
 
         if num_novel > 0:
             self._in_weight_novel = Parameter(
-                torch.empty(num_novel, self.in_features, device=growing_transformer.device), requires_grad=False
+                torch.empty(num_novel, self.in_features, device=growing_transformer.device)
             )
             self._out_weight_novel = Parameter(
-                torch.empty(self.out_features, num_novel, device=growing_transformer.device), requires_grad=False
+                torch.empty(self.out_features, num_novel, device=growing_transformer.device)
             )
-            self._in_bias_novel = Parameter(
-                torch.empty(num_novel, device=growing_transformer.device), requires_grad=False
-            )
+            self._in_bias_novel = Parameter(torch.empty(num_novel, device=growing_transformer.device))
             uniform_(self._in_weight_novel, -eps_novel_weight, eps_novel_weight)
             uniform_(self._out_weight_novel, -eps_novel_weight, eps_novel_weight)
             uniform_(self._in_bias_novel, -eps_novel_bias, eps_novel_bias)
@@ -222,8 +216,8 @@ class GrowingMLP(GrowingModule):
         self.linear_in.out_features, self.linear_in.in_features = self.linear_in.weight.size()
         self.linear_out.out_features, self.linear_out.in_features = self.linear_out.weight.size()
 
-        # adjust config
-        self.config.intermediate_size = self.linear_in.out_features
-
         # reset temporary variables
         self.reset_grow_state()
+
+    def update_config(self, num_added: int):
+        self.config.intermediate_size = self.linear_in.out_features + num_added

@@ -74,6 +74,9 @@ class Growing(torch.nn.Module):
         for k_prefix, k_new_prefix in self._bert_state_dict_map.items():
             self._switch_key_prefix(state_dict, old_prefix=prefix + k_prefix, new_prefix=prefix + k_new_prefix)
 
+    def update_config(self, num_added: int):
+        pass
+
 
 class GrowingModule(Growing):
     def __init__(self, config: GrowingConfig):
@@ -105,3 +108,7 @@ class GrowingModule(Growing):
 
         # return indices of neurons with largest absolute gradient
         return torch.topk(self.step_size * self.step_size.grad, k).indices
+
+    @abstractmethod
+    def update_config(self, num_added: int):
+        pass
