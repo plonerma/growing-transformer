@@ -425,16 +425,35 @@ class GrowingAttention(GrowingModule):
         assert self._new_dot_product is not None
         assert self._new_output is not None
 
-        def concat_weights(a: Tensor, b: Tensor, out=False):
+        def concat_weights(a: Tensor, b: Tensor, out=False, mul_step=False):
             if out:
                 a, b = a.T, b.T
 
-            a = a.reshape(self.heads, -1, self.d_model)
-            b = b.reshape(-1, a.size(1), self.d_model)
+            bias = len(a.size()) == 1
+
+            if bias:
+                a = a.reshape(self.heads, -1)
+                b = b.reshape(-1, a.size(1))
+            else:
+                a = a.reshape(self.heads, -1, self.d_model)
+                b = b.reshape(-1, a.size(1), self.d_model)
+
             b = b[selected]
+            if mul_step:
+                assert self.step_size is not None
+                print("mul_step", b.size(), self.step_size[selected].size())
+                if bias:
+                    step_size = self.step_size[selected, None]
+                else:
+                    step_size = self.step_size[selected, None, None]
+                b = b * step_size
+
             ab = torch.cat([a, b], dim=0)
 
-            ab = ab.reshape(-1, self.d_model)
+            if bias:
+                ab = ab.reshape(-1)
+            else:
+                ab = ab.reshape(-1, self.d_model)
 
             if out:
                 ab = ab.T
@@ -447,8 +466,8 @@ class GrowingAttention(GrowingModule):
             self._new_dot_product.query_linear.weight,
         )
 
-        self.dot_product.query_linear.bias = Parameter(
-            torch.cat([self.dot_product.query_linear.bias, self._new_dot_product.query_linear.bias], dim=0)
+        self.dot_product.query_linear.bias = concat_weights(
+            self.dot_product.query_linear.bias, self._new_dot_product.query_linear.bias
         )
 
         self.dot_product.query_linear.out_features = self.dot_product.query_linear.bias.size(0)
@@ -458,37 +477,20 @@ class GrowingAttention(GrowingModule):
             self._new_dot_product.key_linear.weight,
         )
 
-        self.dot_product.key_linear.bias = Parameter(
-            torch.cat([self.dot_product.key_linear.bias, self._new_dot_product.key_linear.bias], dim=0)
+        self.dot_product.key_linear.bias = concat_weights(
+            self.dot_product.key_linear.bias, self._new_dot_product.key_linear.bias
         )
 
         self.dot_product.key_linear.out_features = self.dot_product.key_linear.bias.size(0)
 
         # adjust output
+        self.output.value_linear.weight = concat_weights(
+            self.output.value_linear.weight, self._new_output.value_linear.weight, mul_step=True
+        )
 
-        a = self.output.value_linear.weight
-        b = self._new_output.value_linear.weight
-
-        a = a.reshape(self.heads, -1, self.d_model)
-        b = b.reshape(-1, a.size(1), self.d_model)
-
-        b = b * self.step_size.reshape(-1, 1, 1)
-
-        b = b[selected]
-
-        self.output.value_linear.weight = Parameter(torch.cat([a, b], dim=0).reshape(-1, self.d_model))
-
-        a = self.output.value_linear.bias
-        b = self._new_output.value_linear.bias
-
-        a = a.reshape(self.heads, -1)
-        b = b.reshape(-1, a.size(1))
-
-        b = b * self.step_size.reshape(-1, 1)
-
-        b = b[selected, :]
-
-        self.output.value_linear.bias = Parameter(torch.cat([a, b], dim=0).reshape(-1))
+        self.output.value_linear.bias = concat_weights(
+            self.output.value_linear.bias, self._new_output.value_linear.bias, mul_step=True
+        )
 
         self.output.value_linear.out_features = self.output.value_linear.bias.size(0)
 

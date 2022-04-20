@@ -12,6 +12,7 @@ from torch.utils.data import DataLoader
 
 import growing_transformer
 
+from ..model import GrowingModule
 from .base import BaseTrainer
 from .schedule import GrowthSchedule
 from .util import log_line
@@ -70,7 +71,7 @@ class GrowingTrainer(BaseTrainer):
 
             num_matched = 0
             for name, m in self.model.growing_modules(named=True):
-                if re.search(pattern, name) is not None:
+                if re.search(pattern, name) is not None and isinstance(m, GrowingModule):
                     size = m.grow(num_novel=num_novel, split=split)
                     grown_modules.append((m, size, conf))
 

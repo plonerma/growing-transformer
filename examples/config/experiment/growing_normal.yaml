@@ -8,3 +8,6 @@ defaults:
 training:
   schedule:
     training_epochs: 3
+
+  grow_tune_params:
+    lr: 1e-5
