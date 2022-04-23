@@ -24,7 +24,7 @@ cs.store(name="base_config", node=Configuration)
 @hydra.main(config_path="config", config_name="config")
 def main(cfg: Configuration):
     log = logging.getLogger("growing_transformer")
-    add_file_handler(log, Path("training.log"))
+    #add_file_handler(log, Path("training.log"))
 
     growing_transformer.device = torch.device(cfg.training.device)
 
@@ -44,11 +44,6 @@ def main(cfg: Configuration):
     if cfg.dataset.downsample < 1 - 1e-5:
         train_data = train_data.downsampled(cfg.dataset.downsample)
 
-    if cfg.training.grow_data_split > 0:
-        train_data, grow_data = train_data.split(cfg.training.grow_data_split)
-    else:
-        grow_data = MLMSegmenetDataset(corpus["validation"], tokenizer)
-
     test_data = MLMSegmenetDataset(corpus["test"], tokenizer)
 
     model: Union[GrowingMLMTransformer, HuggingfaceMLMTransformer]
@@ -62,6 +57,10 @@ def main(cfg: Configuration):
     else:
         raise RuntimeError(f"Model variant {cfg.model.type} not implemented.")
 
+    if cfg.load_state is not None:
+        state_dict = torch.load(cfg.load_state, map_location=growing_transformer.device)
+        model.load_state_dict(state_dict)
+
     tensorboard_writer = SummaryWriter(".")
 
     trainer = GrowingTrainer(
@@ -73,7 +72,7 @@ def main(cfg: Configuration):
 
     trainer.train(
         train_data=train_data,
-        grow_data=grow_data,
+        grow_data_portion=cfg.training.grow_data_portion,
         schedule=schedule,
         test_data=test_data,
         tensorboard_writer=tensorboard_writer,
@@ -89,6 +88,8 @@ def main(cfg: Configuration):
 
     if cfg.save_model:
         torch.save(model.state_dict(), "trained_model.pt")
+
+    tensorboard_writer.close()
 
 
 if __name__ == "__main__":

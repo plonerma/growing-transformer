@@ -35,12 +35,12 @@ growth_phase_b:
     # since there is no activation function bewtween the value and output layer
     # the split direction would just cancel out
     split: False
-    num_novel: 32
-    num_keep: 8
+    num_novel: 16
+    num_keep: 4
   - match: .dot_product
     split: False  # splitting up key and query is equivalent to just adding new neurons
-    num_novel: 32
-    num_keep: 8
+    num_novel: 16
+    num_keep: 4
   - match: .attention
     split: False
     num_novel: 4

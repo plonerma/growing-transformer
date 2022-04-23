@@ -1,0 +1,21 @@
+# @package _global_
+
+defaults:
+  - override /dataset: wiki_small
+  - override /model: grow_start
+  - override /training: growing
+  - override /training/schedule: growing_single_step
+
+
+
+training:
+  schedule:
+    training_epochs: 10
+
+  grow_tune_params:
+    lr: 1e-5
+
+  grow_data_portion: 1
+
+load_state: "${hydra:runtime.cwd}/models/grow_start.pt"
+save_model: False

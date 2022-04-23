@@ -1,0 +1,6 @@
+# @package _global_
+
+defaults:
+  - override /dataset: wiki_big
+  - override /model: huggingface
+  - override /training: static

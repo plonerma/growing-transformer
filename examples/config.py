@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 
 @dataclass
@@ -31,7 +31,7 @@ class Training:
     tune_direction: bool
     tune_step_size: bool
     selection_method: str
-    grow_data_split: float
+    grow_data_portion: float
     grow_tune_params: Dict
 
 
@@ -41,3 +41,4 @@ class Configuration:
     model: Model
     training: Training
     save_model: bool
+    load_state: Optional[str] = None
