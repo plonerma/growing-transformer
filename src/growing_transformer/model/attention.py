@@ -441,7 +441,7 @@ class GrowingAttention(GrowingModule):
             b = b[selected]
             if mul_step:
                 assert self.step_size is not None
-                print("mul_step", b.size(), self.step_size[selected].size())
+
                 if bias:
                     step_size = self.step_size[selected, None]
                 else:
