@@ -3,27 +3,6 @@ import logging.config
 
 import torch
 
-def setup_logger(base_path):
-    logging.config.dictConfig(
-        {
-            "version": 1,
-            "disable_existing_loggers": False,
-            "formatters": {"standard": {"format": "%(asctime)-15s %(message)s"}},
-            "handlers": {
-                "console": {
-                    "level": "INFO",
-                    "class": "logging.StreamHandler",
-                    "formatter": "standard",
-                    "stream": "ext://sys.stdout",
-                }
-            },
-            "loggers": {"growing_transformer": {"handlers": ["console"], "level": "INFO", "propagate": False}},
-        }
-    )
-    log = logging.getLogger("growing_transformer")
-
-    log_handler = add_file_handler(log, base_path / "training.log")
-
 logger = logging.getLogger("growing_transformer")
 
 
