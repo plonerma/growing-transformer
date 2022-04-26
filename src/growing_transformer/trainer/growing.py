@@ -22,14 +22,9 @@ log = logging.getLogger("growing_transformer")
 
 class GrowingTrainer(BaseTrainer):
     def __init__(
-        self,
-        model,
-        *,
-        tune_direction: bool = True,
-        tune_step_size: bool = True,
-        selection_method="firefly",
+        self, model, *, tune_direction: bool = True, tune_step_size: bool = True, selection_method="firefly", **kws
     ):
-        super().__init__(model)
+        super().__init__(model, **kws)
 
         self._tune_direction = tune_direction
         self._tune_step_size = tune_step_size
@@ -43,14 +38,11 @@ class GrowingTrainer(BaseTrainer):
         index=None,
         batch_size: int = 32,
         gca_batches: int = 1,
-        lr: float = 1e-3,
-        momentum: float = 0.1,
-        alpha: float = 0.9,
         use_onecycle: int = 1,
         num_epochs: int = 1,
         shuffle=True,
-        weight_decay: float = 0,
         num_workers: Optional[int] = None,
+        **optimizer_params,
     ):
         log.info("Growing model")
 
@@ -93,7 +85,12 @@ class GrowingTrainer(BaseTrainer):
                 tuned_str.append("direction")
             if self._tune_step_size:
                 tuned_str.append("step_size")
+
             log.info(f"Tuning {' and '.join(tuned_str)}")
+            log.info(f"- gca_batches: {gca_batches}")
+            log.info(f"- batch_size: {batch_size}")
+            log.info(f"- num_epochs: {num_epochs}")
+            log.info(f"- use_onecycle: {use_onecycle}")
 
             param_groups = list()
             relevant_params = list()
@@ -110,12 +107,12 @@ class GrowingTrainer(BaseTrainer):
                     param_groups.append({"params": params, **kw.get("step_size", dict())})
                     relevant_params += params
 
-            optimizer = torch.optim.RMSprop(
-                param_groups, lr=lr, momentum=momentum, alpha=alpha, weight_decay=weight_decay
-            )
+            optimizer = torch.optim.Adam(param_groups, **optimizer_params)
+
+            num_steps = len(grow_data) // (batch_size * gca_batches) + 1
 
             if use_onecycle:
-                num_steps = len(grow_data) // (batch_size * gca_batches) + 1
+                lr = [group["lr"] for group in optimizer.param_groups]
 
                 scheduler = OneCycleLR(
                     optimizer, steps_per_epoch=num_steps, pct_start=0.1, epochs=num_epochs, max_lr=lr
@@ -125,40 +122,54 @@ class GrowingTrainer(BaseTrainer):
 
             log.info(f"Tuning for {num_epochs} epochs.")
 
-            with self.some_grad_only(*params):
+            with self.some_grad_only(*relevant_params):
                 for epoch in range(num_epochs):
                     batch_loader = DataLoader(
                         grow_data,
                         batch_size=batch_size,
                         shuffle=shuffle,
+                        collate_fn=self.data_collator,
                         num_workers=0 if num_workers is None else num_workers,
                     )
 
-                    for i, batch in enumerate(batch_loader):
-                        tune_step = epoch * len(batch_loader) + i
+                    optimizer.zero_grad()
 
-                        optimizer.zero_grad()
+                    step_loss = 0.0
 
+                    for batch_index, batch in enumerate(batch_loader, start=1):
                         loss = self.model.forward_loss(batch)
                         loss.backward()
+                        step_loss += loss.detach()
 
-                        if tensorboard_writer is not None:
-                            tensorboard_writer.add_scalar(f"tuning directions and steps/step {index}", loss, tune_step)
+                        if batch_index % gca_batches == 0:
 
-                        if (i + 1) % gca_batches == 0:
+                            tune_step = epoch * len(batch_loader) // gca_batches + batch_index // gca_batches
+                            step_loss = step_loss / gca_batches
 
+                            if tensorboard_writer is not None:
+                                tensorboard_writer.add_scalar(
+                                    f"tuning directions and steps/step {index}", step_loss, tune_step
+                                )
+
+                                for n, m in self.model.growing_modules(named=True):
+                                    if isinstance(m, GrowingModule) and m.step_size is not None:
+                                        tensorboard_writer.add_histogram(
+                                            f"step_sizes/step {index}/{n}", m.step_size, tune_step
+                                        )
+        
                             optimizer.step()
 
                             if scheduler is not None:
                                 scheduler.step()
 
                             optimizer.zero_grad()
+                            step_loss = 0.0
 
         log.info(f"Selecting neurons to keep using {self._selection_method }")
 
         # === Select neurons ===
         if self._selection_method == "firefly":
-            self.calculate_step_gradient(grow_data)
+            self.calculate_step_gradient(grow_data, batch_size=256)
 
             for m, size, conf in grown_modules:
                 num_kept_parts = conf["num_keep"]
@@ -190,8 +201,9 @@ class GrowingTrainer(BaseTrainer):
         self,
         train_data,
         schedule: GrowthSchedule,
-        grow_data=None,
+        grow_data_portion=1.0,
         test_data=None,
+        grow_data=None,
         batch_size: int = 32,
         shuffle: bool = True,
         num_workers: Optional[int] = None,
@@ -206,6 +218,7 @@ class GrowingTrainer(BaseTrainer):
             log.info(f"Model: {self.model}")
             log_line(log)
             log.info(f" - growth phases: {len(schedule)}")
+            log.info(f" - number of samples: {len(train_data)}")
             log_line(log)
 
         global_step = 0
@@ -218,10 +231,21 @@ class GrowingTrainer(BaseTrainer):
             if step_type == step_type.grow:
                 grow_params = {"batch_size": batch_size, "shuffle": shuffle, **grow_tune_params}
 
+                if grow_data is None:
+                    _grow_data = train_data
+                else:
+                    _grow_data = grow_data
+
+                if grow_data_portion is not None and grow_data_portion < 1.0:
+                    log.info("Downsampling grow data")
+                    _grow_data = _grow_data.downsampled(grow_data_portion)
+
+                log.info(f"{len(_grow_data)} samples used for tuning growth.")
+
                 grow_start = time.time()
                 self.grow_model(
                     step_params,
-                    grow_data=grow_data,
+                    grow_data=_grow_data,
                     tensorboard_writer=tensorboard_writer,
                     index=step_index,
                     num_workers=num_workers,
@@ -292,6 +316,7 @@ class GrowingTrainer(BaseTrainer):
             train_data,
             batch_size=batch_size,
             shuffle=shuffle,
+            collate_fn=self.data_collator,
             num_workers=0 if num_workers is None else num_workers,
         )
 

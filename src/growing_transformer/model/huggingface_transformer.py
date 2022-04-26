@@ -15,38 +15,32 @@ class HuggingfaceMLMTransformer(BertForMaskedLM):
             self.config.loss_on_all_tokens
         ), "Huggingface transformer only supports calculation of loss on all tokens."
 
-        masked_input = batch["input_masked"].to(growing_transformer.device)
-        attention_mask = batch["attention_mask"].to(growing_transformer.device)
         input_ids = batch["input_ids"].to(growing_transformer.device)
+        attention_mask = batch["attention_mask"].to(growing_transformer.device)
+        labels = batch["labels"].to(growing_transformer.device)
 
-        outputs = self(masked_input, attention_mask=attention_mask, labels=input_ids)
+        outputs = self(input_ids, attention_mask=attention_mask, labels=labels)
 
         return outputs[0]
 
-    def evaluate(self, data, batch_size=32, num_workers=None):
-        batch_loader = DataLoader(
-            data,
-            batch_size=batch_size,
-            shuffle=False,
-            num_workers=0 if num_workers is None else num_workers,
-        )
-
+    def evaluate(self, batch_loader, batch_size=32, num_workers=None):
         total_samples = 0
         total_masked_samples = 0
         correct = 0
         loss = 0.0
 
         for batch in batch_loader:
-            masked_input = batch["input_masked"].to(growing_transformer.device)
-            attention_mask = batch["attention_mask"].to(growing_transformer.device)
-            mlm_mask = batch["mlm_mask"].to(growing_transformer.device)
             input_ids = batch["input_ids"].to(growing_transformer.device)
+            attention_mask = batch["attention_mask"].to(growing_transformer.device)
+            labels = batch["labels"].to(growing_transformer.device)
 
-            outputs = self(masked_input, attention_mask=attention_mask, labels=input_ids)
+            outputs = self(input_ids, attention_mask=attention_mask, labels=labels)
 
             loss, prediction_scores = outputs[:2]
 
             num_classes = prediction_scores.size(-1)
+
+            mlm_mask = labels >= 0
 
             predicted = torch.masked_select(prediction_scores, mlm_mask[..., None]).view(-1, num_classes).argmax(-1)
 

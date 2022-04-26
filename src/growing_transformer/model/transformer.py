@@ -91,14 +91,7 @@ class GrowingMLMTransformer(Growing):
 
         return masked_lm_loss
 
-    def evaluate(self, data, batch_size=32, num_workers=None):
-        batch_loader = DataLoader(
-            data,
-            batch_size=batch_size,
-            shuffle=False,
-            num_workers=0 if num_workers is None else num_workers,
-        )
-
+    def evaluate(self, batch_loader, batch_size=32, num_workers=None):
         total_samples = 0
         correct = 0
         loss = 0.0
