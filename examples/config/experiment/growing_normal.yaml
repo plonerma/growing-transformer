@@ -1,7 +1,9 @@
 # @package _global_
 
 defaults:
-  - override /dataset: wiki_big
+  - _self_
+  - override /datasets:
+      - wiki_big
   - override /model: grow_start
   - override /training: growing
 

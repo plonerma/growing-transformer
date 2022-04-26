@@ -1,7 +1,9 @@
 defaults:
   - base_config
-  - dataset: wiki_big
+  - datasets:
+      - wiki_big
   - model: static
   - training: static
 
 save_model: True
+preprocessing_num_workers: 4

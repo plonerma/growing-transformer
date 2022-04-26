@@ -1,0 +1,5 @@
+bookcorpus:
+  name: "bookcorpus"
+  version: "plain_text"
+  test_portion: 0.1
+  num_workers: 8

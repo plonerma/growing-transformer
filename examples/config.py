@@ -6,7 +6,10 @@ from typing import Dict, List, Optional
 class Dataset:
     name: str
     version: str
-    downsample: float
+    downsample: Optional[float] = None
+    test_portion: Optional[float] = None
+    test_split_seed: Optional[int] = 0
+    num_workers: Optional[int] = None
 
 
 @dataclass
@@ -33,12 +36,17 @@ class Training:
     selection_method: str
     grow_data_portion: float
     grow_tune_params: Dict
+    mlm_probability: float = 0.15
+    warmup_pct: float = 0.1
 
 
 @dataclass
 class Configuration:
-    dataset: Dataset
+    datasets: Dict[str, Dataset]
     model: Model
     training: Training
     save_model: bool
     load_state: Optional[str] = None
+    ignore_cache: bool = False
+    preprocessing_num_workers: Optional[int] = 1
+    max_seq_length: Optional[int] = None

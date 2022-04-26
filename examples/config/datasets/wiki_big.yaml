@@ -1,0 +1,5 @@
+wiki_big:
+  name: "wikitext"
+  version: "wikitext-103-raw-v1"
+  downsample: 1.0
+  num_workers: 8

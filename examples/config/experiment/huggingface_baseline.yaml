@@ -1,0 +1,13 @@
+# @package _global_
+
+defaults:
+  - override /datasets:
+    - wiki_big
+    - bookcorpus
+  - override /model: huggingface
+  - override /training: static
+
+training:
+  batch_size: 128
+  gca_batches: 2
+  warmup_pct: 0.05
