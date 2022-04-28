@@ -226,9 +226,13 @@ class BaseTrainer:
                 predicted = prediction_scores.argmax(-1)
                 # select relevant tokens
                 mlm_mask = labels >= 0
-                correct += (predicted[mlm_mask] == labels[mlm_mask]).sum().detach().cpu().float()
 
-                total_samples += labels.size(0)
+                mlm_mask = predicted.view(-1)
+                predicted = predicted.view(-1)
+                labels = labels.view(-1)
+                correct += (predicted[mlm_mask] == labels[mlm_mask]).sum().detach().float()
+
+                total_samples += mlm_mask.sum()
 
             eval_loss = loss_sum / len(batch_loader)
 
