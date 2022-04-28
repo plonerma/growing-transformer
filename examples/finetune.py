@@ -21,6 +21,13 @@ def parse_args():
     parser = argparse.ArgumentParser(description="Fine-tune model.")
     parser.add_argument("task", metavar="TASK", type=str, help="task to finetune on")
     parser.add_argument("--device", type=str, help="device to use for finetuning", default=None)
+    parser.add_argument("--lr", type=float, help="learning rate", default=1e-5)
+    parser.add_argument("--epochs", type=float, help="number of epochs", default=10)
+    parser.add_argument("--warmup_pct", type=float, help="warmup time (as float < 1.0)", default=0.06)
+    parser.add_argument("--gca", type=float, help="number of batches to accumulate for each update step", default=2)
+    parser.add_argument(
+        "--batch", type=float, help="batch size (multiple batches may be accumulated using --gca)", default=16
+    )
     return parser.parse_args()
 
 
@@ -45,6 +52,7 @@ def main(args):
 
     trainer = Trainer(
         model,
+        metric=metric,
         data_collator=default_data_collator,
     )
 
@@ -55,10 +63,11 @@ def main(args):
     trainer.train(
         train_data=dataset["train"],
         test_data=dataset["validation"],
-        max_lr=1e-6,
-        gca_batches=2,
+        max_lr=args.lr,
+        gca_batches=args.gca,
         batch_size=16,
-        num_epochs=4,
+        num_epochs=args.epochs,
+        warmup_pct=args.warmup_pct,
         tensorboard_writer=tensorboard_writer,
     )
 
