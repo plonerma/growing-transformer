@@ -196,6 +196,7 @@ class BaseTrainer:
         return outputs.loss
 
     def evaluate(self, data, batch_size=32, num_workers=None):
+        log.info(f"Evaluating model on {len(data)} samples.")
         self.model.eval()
 
         batch_loader = DataLoader(
@@ -224,7 +225,7 @@ class BaseTrainer:
                 # select relevant tokens
                 mlm_mask = labels >= 0
 
-                mlm_mask = predicted.view(-1)
+                mlm_mask = mlm_mask.view(-1)
                 predicted = predicted.view(-1)
                 labels = labels.view(-1)
                 correct += (predicted[mlm_mask] == labels[mlm_mask]).sum().detach().float()
