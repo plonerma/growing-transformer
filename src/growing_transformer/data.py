@@ -112,7 +112,7 @@ def load_glue_task(task, tokenizer, ignore_cache=False):
         )
         return {
             "labels": examples["label"],
-            **tokenizer(*args, padding=padding, max_length=max_seq_length, truncation=True)
+            **tokenizer(*args, padding=padding, max_length=max_seq_length, truncation=True),
         }
 
     if not task == "stsb":

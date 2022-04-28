@@ -1,11 +1,9 @@
 import argparse
 import logging
-
 from datetime import datetime
 
 import torch
 from torch.utils.tensorboard import SummaryWriter
-
 from transformers import (
     BertForSequenceClassification,
     BertTokenizer,

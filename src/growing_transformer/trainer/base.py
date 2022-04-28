@@ -82,8 +82,6 @@ class BaseTrainer:
             # else:
             #    scheduler = None
 
-
-
             batch_loader = DataLoader(
                 train_data,
                 batch_size=batch_size,
@@ -103,7 +101,6 @@ class BaseTrainer:
                     for i, group in enumerate(optimizer.param_groups):
                         tensorboard_writer.add_scalar(f"learning_rate/{i}", group["lr"], global_step)
                     tensorboard_writer.add_scalar("epochs_completed", epoch, global_step)
-
 
                 accumulated_batch_loss = 0
                 epoch_loss = 0
