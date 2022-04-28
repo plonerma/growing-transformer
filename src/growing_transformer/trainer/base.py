@@ -63,7 +63,7 @@ class BaseTrainer:
             )
 
             # if use_onecycle:
-            num_training_steps = len(train_data) // (batch_size * gca_batches) + 1
+            num_training_steps = 1 + (len(train_data) // (batch_size * gca_batches)) * num_epochs
 
             # scheduler = OneCycleLR(
             #    optimizer, steps_per_epoch=num_steps, pct_start=warmup_pct, epochs=num_epochs, max_lr=max_lr
