@@ -2,7 +2,7 @@ import random
 from itertools import chain
 from typing import Union
 
-from datasets import Dataset, DatasetDict, load_dataset
+from datasets import Dataset, DatasetDict, load_dataset, load_metric
 from torch.utils.data import Subset
 
 
@@ -84,40 +84,51 @@ def split_dataset(data, proportion):
     return Subset(data, indices[:n_samples]), Subset(data, indices[n_samples:])
 
 
-def load_glue_dataset(task, tokenizer):
+glue_task_to_keys = {
+    "cola": ("sentence", None),
+    "mnli": ("premise", "hypothesis"),
+    "mrpc": ("sentence1", "sentence2"),
+    "qnli": ("question", "sentence"),
+    "qqp": ("question1", "question2"),
+    "rte": ("sentence1", "sentence2"),
+    "sst2": ("sentence", None),
+    "stsb": ("sentence1", "sentence2"),
+    "wnli": ("sentence1", "sentence2"),
+}
+
+
+def load_glue_task(task, tokenizer, ignore_cache=False):
     dataset = load_dataset("glue", task)
 
-    def tokenize(batch):
-        if "question" in batch:
-            text = batch.pop("question")
-            text_pair = batch.pop("sentence")
-        elif "sentence" in batch:
-            text = batch.pop("sentence")
-            text_pair = None
-        elif "sentence1" in batch:
-            text = batch.pop("sentence1")
-            text_pair = batch.pop("sentence2", None)
-        else:
-            raise RuntimeError("Did not find sentence in sample.")
+    sentence1_key, sentence2_key = glue_task_to_keys[task]
 
-        if text_pair is None:
-            data = text
-        else:
-            data = text, text_pair
+    padding = "max_length"
+    max_seq_length = 512
 
-        batch.update(
-            tokenizer(
-                data,
-                max_length=512,
-                padding="max_length",
-                # return_tensors="pt",
-                return_special_tokens_mask=True,
-                truncation=True,
-            )
+    def preprocess_function(examples):
+        # Tokenize the texts
+        args = (
+            (examples[sentence1_key],) if sentence2_key is None else (examples[sentence1_key], examples[sentence2_key])
         )
+        return {
+            "labels": examples["label"],
+            **tokenizer(*args, padding=padding, max_length=max_seq_length, truncation=True)
+        }
 
-        batch.pop("idx", None)
+    if not task == "stsb":
+        label_list = dataset["train"].features["label"].names
+        num_labels = len(label_list)
+    else:
+        num_labels = 1
 
-        return batch
+    dataset = dataset.map(
+        preprocess_function,
+        batched=True,
+        remove_columns=dataset["train"].column_names,
+        load_from_cache_file=(not ignore_cache),
+        desc="Running tokenizer on dataset",
+    )
 
-    return dataset.map(tokenize, batched=True)
+    metric = load_metric("glue", task)
+
+    return dataset, metric, num_labels

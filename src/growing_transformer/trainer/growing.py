@@ -137,7 +137,7 @@ class GrowingTrainer(BaseTrainer):
                     step_loss = 0.0
 
                     for batch_index, batch in enumerate(batch_loader, start=1):
-                        loss = self.model.forward_loss(batch)
+                        loss = self.forward_loss(batch)
                         loss.backward()
                         step_loss += loss.detach()
 
@@ -156,7 +156,7 @@ class GrowingTrainer(BaseTrainer):
                                         tensorboard_writer.add_histogram(
                                             f"step_sizes/step {index}/{n}", m.step_size, tune_step
                                         )
-        
+
                             optimizer.step()
 
                             if scheduler is not None:
@@ -324,5 +324,5 @@ class GrowingTrainer(BaseTrainer):
             self.model.zero_grad()
 
             for batch in batch_loader:
-                loss = self.model.forward_loss(batch)
+                loss = self.forward_loss(batch)
                 loss.backward()

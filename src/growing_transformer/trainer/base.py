@@ -1,4 +1,5 @@
 import logging
+import math
 from typing import Optional, Tuple
 
 import torch
@@ -54,18 +55,19 @@ class BaseTrainer:
             log_line(log)
 
         use_tensorboard = tensorboard_writer is not None
+        eval_results = {}
 
         try:
             optimizer = torch.optim.AdamW(
                 self.model.parameters(), lr=max_lr, betas=betas, eps=eps, weight_decay=weight_decay, **kw
             )
 
-            #if use_onecycle:
+            # if use_onecycle:
             num_training_steps = len(train_data) // (batch_size * gca_batches) + 1
 
-            #scheduler = OneCycleLR(
+            # scheduler = OneCycleLR(
             #    optimizer, steps_per_epoch=num_steps, pct_start=warmup_pct, epochs=num_epochs, max_lr=max_lr
-            #)
+            # )
 
             num_warmup_steps = int(warmup_pct * num_training_steps)
 
@@ -77,42 +79,45 @@ class BaseTrainer:
                 )
 
             scheduler = LambdaLR(optimizer, lr_lambda, -1)
-            #else:
+            # else:
             #    scheduler = None
 
-            self.model.train()
+
+
+            batch_loader = DataLoader(
+                train_data,
+                batch_size=batch_size,
+                shuffle=shuffle,
+                collate_fn=self.data_collator,
+                num_workers=0 if num_workers is None else num_workers,
+            )
 
             # === START OF TRAINING LOOP ===
-
             for epoch in range(start_epoch, start_epoch + num_epochs):
-                batch_loader = DataLoader(
-                    train_data,
-                    batch_size=batch_size,
-                    shuffle=shuffle,
-                    collate_fn=self.data_collator,
-                    num_workers=0 if num_workers is None else num_workers,
-                )
-
                 log.info(f"Epoch #{epoch:02}")
 
-                if use_tensorboard:
-                    # write intial values
+                self.model.train()
 
+                if use_tensorboard and epoch == start_epoch:
+                    # write intial values
                     for i, group in enumerate(optimizer.param_groups):
                         tensorboard_writer.add_scalar(f"learning_rate/{i}", group["lr"], global_step)
                     tensorboard_writer.add_scalar("epochs_completed", epoch, global_step)
 
-                loss_gca_sum = 0
-                loss_epoch_sum = 0
+
+                accumulated_batch_loss = 0
+                epoch_loss = 0
 
                 optimizer.zero_grad()
                 for batch_index, batch in enumerate(batch_loader, start=1):
 
-                    loss = self.model.forward_loss(batch)
-                    loss.backward()
+                    loss = self.forward_loss(batch)
 
-                    loss_epoch_sum += loss.detach()
-                    loss_gca_sum += loss.detach()
+                    epoch_loss += loss.detach().float()
+                    accumulated_batch_loss += loss.detach().float()
+
+                    loss = loss / gca_batches
+                    loss.backward()
 
                     if batch_index % gca_batches == 0:
                         global_step += 1
@@ -126,11 +131,11 @@ class BaseTrainer:
 
                         if use_tensorboard:
                             tensorboard_writer.add_scalar(
-                                "loss/train_loss_batch", loss_gca_sum / gca_batches, global_step
+                                "loss/train_loss_batch", accumulated_batch_loss / gca_batches, global_step
                             )
-                        loss_gca_sum = 0
+                        accumulated_batch_loss = 0
 
-                loss = loss_epoch_sum / batch_index
+                loss = epoch_loss / batch_index
 
                 if use_tensorboard:
                     for i, group in enumerate(optimizer.param_groups):
@@ -161,6 +166,17 @@ class BaseTrainer:
             if propagate_interrupt:
                 raise KeyboardInterrupt
 
+            if test_data:
+                log.info("Evaluating after early termination.")
+                eval_results = self.evaluate(test_data, batch_size=batch_size)
+                log.info(f"Eval loss: {eval_results['eval_loss']:.4}")
+                log.info(f"Eval accuracy: {eval_results['accuracy']:.4}")
+                log.info(f"Eval perplexity: {eval_results['perplexity']:.4}")
+                if use_tensorboard:
+                    tensorboard_writer.add_scalar("loss/evaluation", eval_results["eval_loss"], global_step)
+                    tensorboard_writer.add_scalar("accuracy", eval_results["accuracy"], global_step)
+                    tensorboard_writer.add_scalar("perplexity", eval_results["perplexity"], global_step)
+
         results = dict(
             final_train_loss=loss,
             epoch=epoch,
@@ -174,15 +190,55 @@ class BaseTrainer:
 
         return results
 
-    def evaluate(self, data, batch_size=32):
+    def prepare_batch(self, batch):
+        return {k: v.to(growing_transformer.device) for k, v in batch.items()}
+
+    def forward_loss(self, batch):
+        batch = self.prepare_batch(batch)
+        outputs = self.model(**batch)
+        return outputs.loss
+
+    def evaluate(self, data, batch_size=32, num_workers=None):
         self.model.eval()
 
+        batch_loader = DataLoader(
+            data,
+            batch_size=batch_size,
+            shuffle=False,
+            collate_fn=self.data_collator,
+            num_workers=0 if num_workers is None else num_workers,
+        )
+
+        total_samples = 0
+        correct = 0
+        loss_sum = 0.0
+
         with torch.no_grad():
-            batch_loader = DataLoader(
-                data,
-                batch_size=batch_size,
-                shuffle=False,
-                collate_fn=self.data_collator,
-                num_workers=0 if num_workers is None else num_workers,
+            for batch in batch_loader:
+                batch = self.prepare_batch(batch)
+
+                labels = batch["labels"]
+
+                outputs = self.model(**batch)
+                loss_sum += outputs[0].detach().float()
+                prediction_scores = outputs[1]
+
+                predicted = prediction_scores.argmax(-1)
+                # select relevant tokens
+                mlm_mask = labels >= 0
+                correct += (predicted[mlm_mask] == labels[mlm_mask]).sum().detach().cpu().float()
+
+                total_samples += labels.size(0)
+
+            eval_loss = loss_sum / len(batch_loader)
+
+            try:
+                perplexity = math.exp(eval_loss)
+            except OverflowError:
+                perplexity = float("inf")
+
+            return dict(
+                accuracy=correct / total_samples,
+                eval_loss=eval_loss,
+                perplexity=perplexity,
             )
-            return self.model.evaluate(batch_loader, batch_size=batch_size)

@@ -9,7 +9,7 @@ from config import Configuration
 from datasets import DatasetDict
 from hydra.core.config_store import ConfigStore
 from torch.utils.tensorboard import SummaryWriter
-from transformers import BertTokenizer, DataCollatorForLanguageModeling
+from transformers import BertForMaskedLM, BertTokenizer, DataCollatorForLanguageModeling
 
 import growing_transformer
 from growing_transformer import GrowingConfig, GrowingTrainer, GrowthSchedule
@@ -19,7 +19,7 @@ from growing_transformer.data import (
     split_dataset,
     tokenize_dataset,
 )
-from growing_transformer.model import GrowingMLMTransformer, HuggingfaceMLMTransformer
+from growing_transformer.model import GrowingMLMTransformer
 
 cs = ConfigStore.instance()
 cs.store(name="base_config", node=Configuration)
@@ -109,13 +109,13 @@ def main(cfg: Configuration):
     else:
         train_data, test_data = loaded_datasets[0]
 
-    model: Union[GrowingMLMTransformer, HuggingfaceMLMTransformer]
+    model: Union[GrowingMLMTransformer, BertForMaskedLM]
 
     if cfg.model.type == "growing":
         model = GrowingMLMTransformer(model_config)
 
     elif cfg.model.type == "huggingface":
-        model = HuggingfaceMLMTransformer(model_config)
+        model = BertForMaskedLM(model_config)
 
     else:
         raise RuntimeError(f"Model variant {cfg.model.type} not implemented.")

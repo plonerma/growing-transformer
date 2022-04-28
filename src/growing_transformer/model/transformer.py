@@ -1,16 +1,13 @@
-import math
-from typing import Mapping, Optional
+from typing import Optional, Tuple, Union
 
 import torch
 from torch import Tensor
-from torch.utils.data import DataLoader
 from transformers.models.bert.modeling_bert import (
     BertEmbeddings,
     BertOnlyMLMHead,
     BertPooler,
+    MaskedLMOutput,
 )
-
-import growing_transformer
 
 from ..configuration import GrowingConfig
 from .base import Growing
@@ -25,7 +22,20 @@ class GrowingTransformer(Growing):
         self.encoder = GrowingEncoder(config)
 
         self.pooler = BertPooler(config) if add_pooling_layer else None
-        self.to(growing_transformer.device)
+
+    def _init_weights(self, module):
+        """Initialize the weights"""
+        if isinstance(module, torch.nn.Linear):
+            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            if module.bias is not None:
+                module.bias.data.zero_()
+        elif isinstance(module, torch.nn.Embedding):
+            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            if module.padding_idx is not None:
+                module.weight.data[module.padding_idx].zero_()
+        elif isinstance(module, torch.nn.LayerNorm):
+            module.bias.data.zero_()
+            module.weight.data.fill_(1.0)
 
     def get_input_embeddings(self):
         return self.embeddings.word_embeddings
@@ -57,81 +67,63 @@ class GrowingMLMTransformer(Growing):
 
         self.bert = GrowingTransformer(config)
         self.cls = BertOnlyMLMHead(config)
+        self.loss_fct = torch.nn.CrossEntropyLoss()
 
-        self.criterion = torch.nn.CrossEntropyLoss()
-        self.to(growing_transformer.device)
+        self.apply(self._init_weights)
 
-    def forward(self, inputs: Tensor, attention_mask: Optional[Tensor] = None, mlm_mask: Optional[Tensor] = None):
-        inputs.to(growing_transformer.device)
-        return self.cls(self.bert(inputs, attention_mask=attention_mask))
+    def forward(
+        self,
+        input_ids: Optional[torch.Tensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        token_type_ids: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.Tensor] = None,
+        head_mask: Optional[torch.Tensor] = None,
+        inputs_embeds: Optional[torch.Tensor] = None,
+        encoder_hidden_states: Optional[torch.Tensor] = None,
+        encoder_attention_mask: Optional[torch.Tensor] = None,
+        labels: Optional[torch.Tensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple[torch.Tensor], MaskedLMOutput]:
+        r"""
+        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ...,
+            config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are ignored (masked), the
+            loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`
+        """
 
-    def forward_loss(self, batch: Mapping[str, Tensor]):
-        masked_input = batch["input_masked"].to(growing_transformer.device)
-        attention_mask = batch["attention_mask"].to(growing_transformer.device)
-        mlm_mask = batch["mlm_mask"].to(growing_transformer.device)
-        input_ids = batch["input_ids"].to(growing_transformer.device)
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        prediction_scores = self(masked_input, attention_mask=attention_mask)
+        outputs = self.bert(
+            input_ids,
+            attention_mask=attention_mask,
+            token_type_ids=token_type_ids,
+            position_ids=position_ids,
+            head_mask=head_mask,
+            inputs_embeds=inputs_embeds,
+            encoder_hidden_states=encoder_hidden_states,
+            encoder_attention_mask=encoder_attention_mask,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
 
-        num_classes = prediction_scores.size(-1)
+        sequence_output = outputs[0]
+        prediction_scores = self.cls(sequence_output)
 
-        if not self.config.loss_on_all_tokens:
-            prediction_scores = torch.masked_select(prediction_scores, mlm_mask[..., None]).view(-1, num_classes)
+        masked_lm_loss = None
+        if labels is not None:
+            # -100 index = padding token
+            masked_lm_loss = self.loss_fct(prediction_scores.view(-1, self.config.vocab_size), labels.view(-1))
 
-            # select relevant labels
-            labels = torch.masked_select(input_ids, mlm_mask)
+        if not return_dict:
+            output = (prediction_scores,) + outputs[2:]
+            return ((masked_lm_loss,) + output) if masked_lm_loss is not None else output
 
-        else:
-            # for consistency with huggingface MLM transformr, calculate loss on
-            # all token
-            prediction_scores = prediction_scores.view(-1, num_classes)
-            labels = input_ids
-
-        masked_lm_loss = self.criterion(prediction_scores.view(-1, self.config.vocab_size), labels.view(-1))
-
-        return masked_lm_loss
-
-    def evaluate(self, batch_loader, batch_size=32, num_workers=None):
-        total_samples = 0
-        correct = 0
-        loss = 0.0
-
-        for batch in batch_loader:
-            masked_input = batch["input_masked"].to(growing_transformer.device)
-            attention_mask = batch["attention_mask"].to(growing_transformer.device)
-            mlm_mask = batch["mlm_mask"].to(growing_transformer.device)
-            input_ids = batch["input_ids"].to(growing_transformer.device)
-
-            prediction_scores = self(masked_input, attention_mask)
-            num_classes = self.config.vocab_size
-
-            # select relevant labels
-            labels = torch.masked_select(input_ids, mlm_mask)
-
-            if not self.config.loss_on_all_tokens:
-                prediction_scores = torch.masked_select(prediction_scores, mlm_mask[..., None]).view(-1, num_classes)
-                loss += self.criterion(prediction_scores.view(-1, num_classes), labels.view(-1))
-
-            else:
-                # for consistency with huggingface MLM transformr, calculate loss on
-                # all token
-                loss += self.criterion(prediction_scores.view(-1, num_classes), input_ids.view(-1))
-                prediction_scores = torch.masked_select(prediction_scores, mlm_mask[..., None]).view(-1, num_classes)
-
-            predicted = prediction_scores.argmax(-1)
-            correct += (predicted == labels).sum()
-
-            total_samples += labels.size(0)
-
-        eval_loss = loss / len(batch_loader)
-
-        try:
-            perplexity = math.exp(eval_loss)
-        except OverflowError:
-            perplexity = float("inf")
-
-        return dict(
-            accuracy=correct / total_samples,
-            eval_loss=eval_loss,
-            perplexity=perplexity,
+        return MaskedLMOutput(
+            loss=masked_lm_loss,
+            logits=prediction_scores,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
         )
