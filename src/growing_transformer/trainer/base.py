@@ -1,7 +1,8 @@
 import logging
 import math
-from typing import Optional, Tuple
+from typing import Dict, Mapping, Optional, Tuple
 
+import datasets
 import torch
 
 # https://github.com/pytorch/pytorch/issues/39009
@@ -16,9 +17,14 @@ log = logging.getLogger("growing_transformer")
 
 
 class BaseTrainer:
-    def __init__(self, model, data_collator=None):
+    def __init__(self, model, data_collator=None, metric: Optional[datasets.Metric] = None):
         self.model = model
         self.data_collator = data_collator
+
+        if metric is None:
+            metric = datasets.load_metric("accuracy")
+
+        self.metric = metric
 
     def train(
         self,
@@ -146,33 +152,23 @@ class BaseTrainer:
                     )
 
                 log.info(f"Train loss: {loss:.4}")
-                if test_data:
-                    eval_results = self.evaluate(test_data, batch_size=batch_size)
-                    log.info(f"Eval loss: {eval_results['eval_loss']:.4}")
-                    log.info(f"Eval accuracy: {eval_results['accuracy']:.4}")
-                    log.info(f"Eval perplexity: {eval_results['perplexity']:.4}")
-                    if use_tensorboard:
-                        tensorboard_writer.add_scalar("loss/evaluation", eval_results["eval_loss"], global_step)
-                        tensorboard_writer.add_scalar("accuracy", eval_results["accuracy"], global_step)
-                        tensorboard_writer.add_scalar("perplexity", eval_results["perplexity"], global_step)
+                if test_data is not None:
+                    eval_results = self.evaluate(test_data, batch_size=batch_size, num_workers=num_workers)
+                    self.track_evaluation(eval_results, global_step, tensorboard_writer=tensorboard_writer)
 
         except KeyboardInterrupt:
             log_line(log)
-            log.warning("Exiting from training early.")
 
             if propagate_interrupt:
+                log.warning("Exiting from training early.")
                 raise KeyboardInterrupt
 
-            if test_data:
-                log.info("Evaluating after early termination.")
-                eval_results = self.evaluate(test_data, batch_size=batch_size)
-                log.info(f"Eval loss: {eval_results['eval_loss']:.4}")
-                log.info(f"Eval accuracy: {eval_results['accuracy']:.4}")
-                log.info(f"Eval perplexity: {eval_results['perplexity']:.4}")
-                if use_tensorboard:
-                    tensorboard_writer.add_scalar("loss/evaluation", eval_results["eval_loss"], global_step)
-                    tensorboard_writer.add_scalar("accuracy", eval_results["accuracy"], global_step)
-                    tensorboard_writer.add_scalar("perplexity", eval_results["perplexity"], global_step)
+            if test_data is not None:
+                log.info("Evaluating after early termination:")
+                eval_results = self.evaluate(test_data, batch_size=batch_size, num_workers=num_workers)
+                self.track_evaluation(eval_results, global_step, tensorboard_writer=tensorboard_writer)
+            else:
+                log.warning("Exiting from training early.")
 
         results = dict(
             final_train_loss=loss,
@@ -195,7 +191,13 @@ class BaseTrainer:
         outputs = self.model(**batch)
         return outputs.loss
 
-    def evaluate(self, data, batch_size=32, num_workers=None):
+    def track_evaluation(self, eval_results: Mapping, global_step: int = None, tensorboard_writer=None):
+        for k, v in eval_results.items():
+            log.info(f"Eval {k}: {v:.4}")
+            if tensorboard_writer is not None:
+                tensorboard_writer.add_scalar(f"eval/{k}", v, global_step)
+
+    def evaluate(self, data, batch_size=32, num_workers=None) -> Dict:
         log.info(f"Evaluating model on {len(data)} samples.")
         self.model.eval()
 
@@ -207,8 +209,6 @@ class BaseTrainer:
             num_workers=0 if num_workers is None else num_workers,
         )
 
-        total_samples = 0
-        correct = 0
         loss_sum = 0.0
 
         with torch.no_grad():
@@ -221,16 +221,9 @@ class BaseTrainer:
                 loss_sum += outputs[0].detach().float()
                 prediction_scores = outputs[1]
 
-                predicted = prediction_scores.argmax(-1)
-                # select relevant tokens
-                mlm_mask = labels >= 0
+                predictions = prediction_scores.argmax(-1)
 
-                mlm_mask = mlm_mask.view(-1)
-                predicted = predicted.view(-1)
-                labels = labels.view(-1)
-                correct += (predicted[mlm_mask] == labels[mlm_mask]).sum().detach().float()
-
-                total_samples += mlm_mask.sum()
+                self.metric.add_batch(predictions=predictions, references=labels)
 
             eval_loss = loss_sum / len(batch_loader)
 
@@ -239,8 +232,8 @@ class BaseTrainer:
             except OverflowError:
                 perplexity = float("inf")
 
-            return dict(
-                accuracy=correct / total_samples,
-                eval_loss=eval_loss,
-                perplexity=perplexity,
-            )
+            eval_results = self.metric.compute()
+
+            assert eval_results is not None
+
+            return {"eval_loss": eval_loss, "perplexity": perplexity, **eval_results}
