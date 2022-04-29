@@ -8,8 +8,18 @@ defaults:
   - _self_
 
 training:
+
+  batch_size: 16
+  gca_batches: 16
+  warmup_pct: 0.05
+  learning_rate: 1e-4
+  weight_decay: 0.01
+  betas: [0.9, 0.999]
+
   schedule:
     training_epochs: 3
 
   grow_tune_params:
-    lr: 1e-5
+    learning_rate: 1e-4
+    weight_decay: 0.01
+    betas: [0.9, 0.999]

@@ -15,7 +15,7 @@ training:
     training_epochs: 10
 
   grow_tune_params:
-    lr: 1e-5
+    learning_rate: 1e-5
 
   grow_data_portion: 1
 

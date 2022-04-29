@@ -19,7 +19,7 @@ grow_tune_params:
   batch_size: 32
   gca_batches: 8
   use_onecycle: True
-  lr: 6e-4
+  learning_rate: 6e-4
   weight_decay: 0.01
   betas:
     - 0.9
