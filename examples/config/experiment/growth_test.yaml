@@ -1,10 +1,10 @@
 # @package _global_
 
 defaults:
-  - _self_
   - override /datasets:
     - wiki_small
   - override /training: growing
+  - _self_
 
 model:
   type: growing

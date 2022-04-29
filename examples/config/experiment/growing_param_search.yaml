@@ -1,12 +1,12 @@
 # @package _global_
 
 defaults:
-  - _self_
   - override /datasets:
     - wiki_big
   - override /model: grow_start
   - override /training: growing
   - override /training/schedule: growing_single_step
+  - _self_
 
 
 

@@ -1,12 +1,12 @@
 # @package _global_
 
 defaults:
-  - _self_
   - override /datasets:
     - wiki_big
     - bookcorpus
   - override /model: huggingface
   - override /training: static
+  - _self_
 
 training:
   batch_size: 128
