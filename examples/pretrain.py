@@ -1,6 +1,6 @@
 import logging
 import random
-from typing import Union
+from typing import Any, Dict, Union
 
 import datasets
 import hydra
@@ -128,30 +128,36 @@ def main(cfg: Configuration):
 
     data_collator = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm_probability=cfg.training.mlm_probability)
 
-    trainer = GrowingTrainer(
-        model,
+    hparams_init: Dict[str, Any] = dict(
+        batch_size=cfg.training.batch_size,
         tune_direction=cfg.training.tune_direction,
         tune_step_size=cfg.training.tune_step_size,
         selection_method=cfg.training.selection_method,
-        data_collator=data_collator,
     )
 
-    trainer.train(
-        train_data=train_data,
+    hparams_train: Dict[str, Any] = dict(
         grow_data_portion=cfg.training.grow_data_portion,
+        gca_batches=cfg.training.gca_batches,
+        eps=cfg.training.eps,
+        max_lr=cfg.training.learning_rate,
+        weight_decay=cfg.training.weight_decay,
+        warmup_pct=cfg.training.warmup_pct,
+        use_onecycle=cfg.training.use_onecycle,
+    )
+
+    trainer = GrowingTrainer(model, data_collator=data_collator, **hparams_init)
+
+    results = trainer.train(
+        train_data=train_data,
         schedule=schedule,
         test_data=test_data,
         tensorboard_writer=tensorboard_writer,
-        batch_size=cfg.training.batch_size,
-        gca_batches=cfg.training.gca_batches,
-        max_lr=cfg.training.learning_rate,
         betas=cfg.training.betas,
-        eps=cfg.training.eps,
-        weight_decay=cfg.training.weight_decay,
-        use_onecycle=cfg.training.use_onecycle,
-        warmup_pct=cfg.training.warmup_pct,
         grow_tune_params=cfg.training.grow_tune_params,
+        **hparams_train,
     )
+
+    tensorboard_writer.add_hparams({**hparams_init, **hparams_train}, results)
 
     if cfg.save_model:
         torch.save(model.state_dict(), "trained_model.pt")

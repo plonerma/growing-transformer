@@ -6,12 +6,9 @@ from typing import Mapping, Optional
 
 import torch
 
-# https://github.com/pytorch/pytorch/issues/39009
-from torch.optim.lr_scheduler import OneCycleLR  # type: ignore
-from torch.utils.data import DataLoader
-
 import growing_transformer
 
+from ..data import downsample_dataset
 from ..model import GrowingModule
 from .base import BaseTrainer
 from .schedule import GrowthSchedule
@@ -49,6 +46,9 @@ class GrowingTrainer(BaseTrainer):
         # === Match and grow modules ===
         grown_modules = list()
 
+        start_size = self.model_size()
+        log.info(f"Model size currently: {start_size}")
+
         for conf in substeps:
             if conf.get("match_end", True):
                 pattern_str = conf["match"] + "$"
@@ -75,6 +75,9 @@ class GrowingTrainer(BaseTrainer):
             log.info(f"Matched {num_matched} to {pattern_str} ({conf}).")
 
         self.model.to(growing_transformer.device)
+
+        overgrown_size = self.model_size()
+        log.info(f"Model size (overgrown): {overgrown_size}")
 
         # === Tune direction and step sizes ===
         if self._tune_direction or self._tune_step_size:
@@ -107,30 +110,19 @@ class GrowingTrainer(BaseTrainer):
                     param_groups.append({"params": params, **kw.get("step_size", dict())})
                     relevant_params += params
 
-            optimizer = torch.optim.Adam(param_groups, **optimizer_params)
+            kw = dict(optimizer_params)
+            lr = kw.pop("learning_rate")
+            optimizer = torch.optim.AdamW(param_groups, lr=lr, **kw)
 
-            num_steps = len(grow_data) // (batch_size * gca_batches) + 1
+            total_steps = num_epochs * len(grow_data) // (batch_size * gca_batches) + 1
 
-            if use_onecycle:
-                lr = [group["lr"] for group in optimizer.param_groups]
-
-                scheduler = OneCycleLR(
-                    optimizer, steps_per_epoch=num_steps, pct_start=0.1, epochs=num_epochs, max_lr=lr
-                )
-            else:
-                scheduler = None
+            scheduler = self.get_lr_scheduler(optimizer, total_steps=total_steps, warmup_pct=0.1)
 
             log.info(f"Tuning for {num_epochs} epochs.")
 
             with self.some_grad_only(*relevant_params):
                 for epoch in range(num_epochs):
-                    batch_loader = DataLoader(
-                        grow_data,
-                        batch_size=batch_size,
-                        shuffle=shuffle,
-                        collate_fn=self.data_collator,
-                        num_workers=0 if num_workers is None else num_workers,
-                    )
+                    batch_loader = self.get_batch_loader(grow_data)
 
                     optimizer.zero_grad()
 
@@ -197,6 +189,16 @@ class GrowingTrainer(BaseTrainer):
                 if tensorboard_writer is not None and selected.numel() and index is not None:
                     tensorboard_writer.add_histogram(f"selected neurons/{m.__class__.__name__}", selected, index)
 
+        grown_size = self.model_size()
+        log.info(f"Model size (after selection): {grown_size}")
+
+        if tensorboard_writer:
+            tensorboard_writer.add_scalar("model size/start size", start_size, index)
+            tensorboard_writer.add_scalar("model size/overgrown size", overgrown_size, index)
+            tensorboard_writer.add_scalar("model size/grown size", grown_size, index)
+            tensorboard_writer.add_scalar("model size/overgrown ratio", overgrown_size / start_size, index)
+            tensorboard_writer.add_scalar("model size/growth ratio", grown_size / start_size, index)
+
     def train(  # type: ignore[override]
         self,
         train_data,
@@ -227,10 +229,11 @@ class GrowingTrainer(BaseTrainer):
 
         self.model.to(growing_transformer.device)
 
+        if tensorboard_writer is not None:
+            tensorboard_writer.add_scalar("model size/current", self.model_size(), global_step)
+
         for step_index, (step_type, step_params) in enumerate(schedule):
             if step_type == step_type.grow:
-                grow_params = {"batch_size": batch_size, "shuffle": shuffle, **grow_tune_params}
-
                 if grow_data is None:
                     _grow_data = train_data
                 else:
@@ -238,7 +241,7 @@ class GrowingTrainer(BaseTrainer):
 
                 if grow_data_portion is not None and grow_data_portion < 1.0:
                     log.info("Downsampling grow data")
-                    _grow_data = _grow_data.downsampled(grow_data_portion)
+                    _grow_data = downsample_dataset(_grow_data, grow_data_portion)
 
                 log.info(f"{len(_grow_data)} samples used for tuning growth.")
 
@@ -249,12 +252,14 @@ class GrowingTrainer(BaseTrainer):
                     tensorboard_writer=tensorboard_writer,
                     index=step_index,
                     num_workers=num_workers,
-                    **grow_params,
+                    **grow_tune_params,
                 )
                 grow_end = time.time()
 
                 if tensorboard_writer is not None:
                     tensorboard_writer.add_scalar("time/growth", grow_end - grow_start, global_step)
+
+                    tensorboard_writer.add_scalar("model size/current", self.model_size(), global_step)
 
             elif step_type == step_type.train:
                 train_params = {**kw, **step_params}
@@ -311,18 +316,9 @@ class GrowingTrainer(BaseTrainer):
     def calculate_step_gradient(
         self, train_data, batch_size: int = 32, shuffle: bool = True, num_workers: Optional[int] = None
     ):
-
-        batch_loader = DataLoader(
-            train_data,
-            batch_size=batch_size,
-            shuffle=shuffle,
-            collate_fn=self.data_collator,
-            num_workers=0 if num_workers is None else num_workers,
-        )
-
         with self.some_grad_only(*self.model.step_size_params()):
             self.model.zero_grad()
 
-            for batch in batch_loader:
+            for batch in self.get_batch_loader(train_data):
                 loss = self.forward_loss(batch)
                 loss.backward()

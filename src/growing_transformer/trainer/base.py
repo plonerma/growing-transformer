@@ -1,5 +1,6 @@
 import logging
 import math
+import time
 from typing import Dict, Mapping, Optional, Tuple
 
 import datasets
@@ -17,7 +18,14 @@ log = logging.getLogger("growing_transformer")
 
 
 class BaseTrainer:
-    def __init__(self, model, data_collator=None, metric: Optional[datasets.Metric] = None):
+    def __init__(
+        self,
+        model,
+        data_collator=None,
+        metric: Optional[datasets.Metric] = None,
+        num_workers: int = None,
+        batch_size: int = 16,
+    ):
         self.model = model
         self.data_collator = data_collator
 
@@ -25,6 +33,41 @@ class BaseTrainer:
             metric = datasets.load_metric("accuracy")
 
         self.metric = metric
+
+        if num_workers is None:
+            self.num_workers = 0
+        else:
+            self.num_workers = num_workers
+
+        self.batch_size = batch_size
+
+    def get_batch_loader(self, data, *, batch_size=None, num_workers=None, shuffle=True):
+        if num_workers is None:
+            num_workers = self.num_workers
+
+        if batch_size is None:
+            batch_size = self.batch_size
+
+        return DataLoader(
+            data,
+            batch_size=batch_size,
+            shuffle=shuffle,
+            collate_fn=self.data_collator,
+            num_workers=num_workers,
+        )
+
+    def get_lr_scheduler(self, optimizer, *, warmup_pct, total_steps):
+        num_warmup_steps = int(warmup_pct * total_steps)
+
+        def lr_lambda(current_step: int):
+            if current_step < num_warmup_steps:
+                return float(current_step) / float(max(1, num_warmup_steps))
+            return max(0.0, float(total_steps - current_step) / float(max(1, total_steps - num_warmup_steps)))
+
+        return LambdaLR(optimizer, lr_lambda, -1)
+
+    def model_size(self):
+        return sum(p.numel() for p in self.model.parameters())
 
     def train(
         self,
@@ -68,52 +111,31 @@ class BaseTrainer:
                 self.model.parameters(), lr=max_lr, betas=betas, eps=eps, weight_decay=weight_decay, **kw
             )
 
-            # if use_onecycle:
-            num_training_steps = 1 + (len(train_data) // (batch_size * gca_batches)) * num_epochs
+            batch_loader = self.get_batch_loader(train_data)
 
-            # scheduler = OneCycleLR(
-            #    optimizer, steps_per_epoch=num_steps, pct_start=warmup_pct, epochs=num_epochs, max_lr=max_lr
-            # )
-
-            num_warmup_steps = int(warmup_pct * num_training_steps)
-
-            def lr_lambda(current_step: int):
-                if current_step < num_warmup_steps:
-                    return float(current_step) / float(max(1, num_warmup_steps))
-                return max(
-                    0.0, float(num_training_steps - current_step) / float(max(1, num_training_steps - num_warmup_steps))
-                )
-
-            scheduler = LambdaLR(optimizer, lr_lambda, -1)
-            # else:
-            #    scheduler = None
-
-            batch_loader = DataLoader(
-                train_data,
-                batch_size=batch_size,
-                shuffle=shuffle,
-                collate_fn=self.data_collator,
-                num_workers=0 if num_workers is None else num_workers,
-            )
+            total_steps = 1 + (len(batch_loader) // gca_batches) * num_epochs
+            
+            scheduler = self.get_lr_scheduler(optimizer, total_steps=total_steps, warmup_pct=warmup_pct)
 
             # === START OF TRAINING LOOP ===
             for epoch in range(start_epoch, start_epoch + num_epochs):
                 log.info(f"Epoch #{epoch:02}")
+                epoch_start = time.time()
 
                 self.model.train()
 
-                if use_tensorboard and epoch == start_epoch:
+                if use_tensorboard:
                     # write intial values
-                    for i, group in enumerate(optimizer.param_groups):
-                        tensorboard_writer.add_scalar(f"learning_rate/{i}", group["lr"], global_step)
-                    tensorboard_writer.add_scalar("epochs_completed", epoch, global_step)
+                    for i, lr in enumerate(scheduler.get_last_lr()):
+                        tensorboard_writer.add_scalar(f"learning_rate/{i}", lr, global_step)
+                    if epoch == start_epoch:
+                        tensorboard_writer.add_scalar("epochs_completed", epoch, global_step)
 
                 accumulated_batch_loss = 0
                 epoch_loss = 0
 
                 optimizer.zero_grad()
                 for batch_index, batch in enumerate(batch_loader, start=1):
-
                     loss = self.forward_loss(batch)
 
                     epoch_loss += loss.detach().float()
@@ -136,20 +158,22 @@ class BaseTrainer:
                             tensorboard_writer.add_scalar(
                                 "loss/train_loss_batch", accumulated_batch_loss / gca_batches, global_step
                             )
+                            for i, lr in enumerate(scheduler.get_last_lr()):
+                                tensorboard_writer.add_scalar(f"learning_rate/{i}", lr, global_step)
+
                         accumulated_batch_loss = 0
 
                 loss = epoch_loss / batch_index
+                epoch_end = time.time()
 
                 if use_tensorboard:
-                    for i, group in enumerate(optimizer.param_groups):
-                        tensorboard_writer.add_scalar(f"learning_rate/{i}", group["lr"], global_step)
 
                     tensorboard_writer.add_scalar("epochs_completed", epoch + 1, global_step)
 
                     tensorboard_writer.add_scalar("loss/train_epoch_epoch", loss, global_step)
-                    tensorboard_writer.add_scalar(
-                        "model size", sum(p.numel() for p in self.model.parameters()), global_step
-                    )
+                    tensorboard_writer.add_scalar("model size/current", self.model_size(), global_step)
+
+                    tensorboard_writer.add_scalar("time/epoch", epoch_end - epoch_start, global_step)
 
                 log.info(f"Train loss: {loss:.4}")
                 if test_data is not None:
@@ -165,7 +189,7 @@ class BaseTrainer:
 
             if test_data is not None:
                 log.info("Evaluating after early termination:")
-                eval_results = self.evaluate(test_data, batch_size=batch_size, num_workers=num_workers)
+                eval_results = self.evaluate(test_data)
                 self.track_evaluation(eval_results, global_step, tensorboard_writer=tensorboard_writer)
             else:
                 log.warning("Exiting from training early.")
@@ -197,21 +221,17 @@ class BaseTrainer:
             if tensorboard_writer is not None:
                 tensorboard_writer.add_scalar(f"eval/{k}", v, global_step)
 
-    def evaluate(self, data, batch_size=32, num_workers=None) -> Dict:
-        log.info(f"Evaluating model on {len(data)} samples.")
+    def evaluate(self, test_data, batch_size=None, num_workers=None) -> Dict:
+        log.info(f"Evaluating model on {len(test_data)} samples.")
         self.model.eval()
-
-        batch_loader = DataLoader(
-            data,
-            batch_size=batch_size,
-            shuffle=False,
-            collate_fn=self.data_collator,
-            num_workers=0 if num_workers is None else num_workers,
-        )
 
         loss_sum = 0.0
 
         with torch.no_grad():
+            batch_loader = self.get_batch_loader(
+                test_data, batch_size=batch_size, num_workers=num_workers, shuffle=False
+            )
+
             for batch in batch_loader:
                 batch = self.prepare_batch(batch)
 
@@ -223,7 +243,13 @@ class BaseTrainer:
 
                 predictions = prediction_scores.argmax(-1)
 
-                self.metric.add_batch(predictions=predictions, references=labels)
+                # only include masked tokens in metrics
+                masked_tokens = (labels >= 0).view(-1)
+
+                self.metric.add_batch(
+                    predictions=predictions.view(-1)[masked_tokens],
+                    references=labels.view(-1)[masked_tokens],
+                )
 
             eval_loss = loss_sum / len(batch_loader)
 
