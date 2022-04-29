@@ -23,30 +23,23 @@ class GrowingTransformer(Growing):
 
         self.pooler = BertPooler(config) if add_pooling_layer else None
 
-    def _init_weights(self, module):
-        """Initialize the weights"""
-        if isinstance(module, torch.nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, torch.nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, torch.nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
-
     def get_input_embeddings(self):
         return self.embeddings.word_embeddings
 
     def set_input_embeddings(self, value):
         self.embeddings.word_embeddings = value
 
-    def forward(self, input_ids: Tensor, attention_mask: Optional[Tensor] = None):
-
+    def forward(
+        self,
+        input_ids: Tensor = None,
+        attention_mask: Tensor = None,
+        token_type_ids: Tensor = None,
+        position_ids: Tensor = None,
+    ):
         embeded = self.embeddings(
             input_ids=input_ids,
+            position_ids=position_ids,
+            token_type_ids=token_type_ids,
         )
 
         encoded = self.encoder(embeded, attention_mask=attention_mask)
@@ -67,25 +60,38 @@ class GrowingMLMTransformer(Growing):
 
         self.bert = GrowingTransformer(config)
         self.cls = BertOnlyMLMHead(config)
+
+        #tie input and output embeddings
+        self.cls.predictions.decoder = self.bert.get_input_embeddings()
+
         self.loss_fct = torch.nn.CrossEntropyLoss()
 
         self.apply(self._init_weights)
 
+    def _init_weights(self, module):
+        """Initialize the weights"""
+        if isinstance(module, torch.nn.Linear):
+            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            if module.bias is not None:
+                module.bias.data.zero_()
+        elif isinstance(module, torch.nn.Embedding):
+            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            if module.padding_idx is not None:
+                module.weight.data[module.padding_idx].zero_()
+        elif isinstance(module, torch.nn.LayerNorm):
+            module.bias.data.zero_()
+            module.weight.data.fill_(1.0)
+
     def forward(
         self,
-        input_ids: Optional[torch.Tensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        token_type_ids: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.Tensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
-        inputs_embeds: Optional[torch.Tensor] = None,
-        encoder_hidden_states: Optional[torch.Tensor] = None,
-        encoder_attention_mask: Optional[torch.Tensor] = None,
-        labels: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+        input_ids: Tensor = None,
+        attention_mask: Tensor = None,
+        token_type_ids: Tensor = None,
+        position_ids: Tensor = None,
+        labels: Tensor = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple[torch.Tensor], MaskedLMOutput]:
+        **kw,
+    ) -> Union[Tuple[Tensor], MaskedLMOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ...,
@@ -96,20 +102,13 @@ class GrowingMLMTransformer(Growing):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.bert(
-            input_ids,
+            input_ids=input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
             position_ids=position_ids,
-            head_mask=head_mask,
-            inputs_embeds=inputs_embeds,
-            encoder_hidden_states=encoder_hidden_states,
-            encoder_attention_mask=encoder_attention_mask,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
         )
 
-        sequence_output = outputs[0]
+        sequence_output = outputs
         prediction_scores = self.cls(sequence_output)
 
         masked_lm_loss = None
@@ -124,6 +123,4 @@ class GrowingMLMTransformer(Growing):
         return MaskedLMOutput(
             loss=masked_lm_loss,
             logits=prediction_scores,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
         )
