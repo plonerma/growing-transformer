@@ -114,7 +114,7 @@ class BaseTrainer:
             batch_loader = self.get_batch_loader(train_data)
 
             total_steps = 1 + (len(batch_loader) // gca_batches) * num_epochs
-            
+
             scheduler = self.get_lr_scheduler(optimizer, total_steps=total_steps, warmup_pct=warmup_pct)
 
             # === START OF TRAINING LOOP ===

@@ -61,7 +61,7 @@ class GrowingMLMTransformer(Growing):
         self.bert = GrowingTransformer(config)
         self.cls = BertOnlyMLMHead(config)
 
-        #tie input and output embeddings
+        # tie input and output embeddings
         self.cls.predictions.decoder = self.bert.get_input_embeddings()
 
         self.loss_fct = torch.nn.CrossEntropyLoss()
