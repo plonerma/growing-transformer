@@ -39,6 +39,7 @@ class GrowingTrainer(BaseTrainer):
         num_epochs: int = 1,
         shuffle=True,
         num_workers: Optional[int] = None,
+        track_tuned_steps=True,
         **optimizer_params,
     ):
         log.info("Growing model")
@@ -143,11 +144,17 @@ class GrowingTrainer(BaseTrainer):
                                     f"tuning directions and steps/step {index}", step_loss, tune_step
                                 )
 
-                                for n, m in self.model.growing_modules(named=True):
-                                    if isinstance(m, GrowingModule) and m.step_size is not None:
-                                        tensorboard_writer.add_histogram(
-                                            f"step_sizes/step {index}/{n}", m.step_size, tune_step
-                                        )
+                                if track_tuned_steps:
+                                    for n, m in self.model.growing_modules(named=True):
+                                        if isinstance(m, GrowingModule) and m.step_size is not None:
+                                            tensorboard_writer.add_histogram(
+                                                f"step_sizes/step {index}/{n}", m.step_size, tune_step
+                                            )
+
+                                        if isinstance(m, GrowingModule) and m.step_size is not None:
+                                            tensorboard_writer.add_histogram(
+                                                f"step_sizes/grad {index}/{n}", m.step_size.grad, tune_step
+                                            )
 
                             optimizer.step()
 
