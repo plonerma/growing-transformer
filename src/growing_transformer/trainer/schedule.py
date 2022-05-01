@@ -34,9 +34,10 @@ class GrowthPhase:
 class StepType(Enum):
     train = 0
     grow = 1
+    checkpoint = 2
 
 
-StepSpec = Union[Tuple[str, Any], List[Mapping[str, Any]]]
+StepSpec = Union[Tuple[str, Any], List[Mapping[str, Any]], str]
 
 
 class GrowthSchedule:
@@ -47,10 +48,13 @@ class GrowthSchedule:
             if isinstance(step_spec, Mapping):
                 assert len(step_spec) == 1, "Step should have exactly one key."
                 ((step_type, step_params),) = step_spec.items()
-            else:
-                assert isinstance(step_spec, tuple)
+            elif isinstance(step_spec, tuple):
                 assert len(step_spec) == 2, "Step should have exactly have type and params."
                 step_type, step_params = step_spec
+            elif isinstance(step_spec, str):
+                step_type, step_params = step_spec, {}
+            else:
+                raise TypeError(f"step specification of unkown type: {type(step_spec)}")
 
             self.steps.append((StepType[step_type.lower()], step_params))
 

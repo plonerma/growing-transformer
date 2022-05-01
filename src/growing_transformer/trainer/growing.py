@@ -298,6 +298,9 @@ class GrowingTrainer(BaseTrainer):
 
                 current_epoch += 1
 
+            elif step_type == step_type.checkpoint:
+                torch.save(self.model.state_dict(), f"checkpoints/checkpoint_{step_index}.pt")
+
         return train_info
 
     @contextmanager
