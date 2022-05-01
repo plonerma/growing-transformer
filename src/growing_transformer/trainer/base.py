@@ -56,15 +56,24 @@ class BaseTrainer:
             num_workers=num_workers,
         )
 
-    def get_lr_scheduler(self, optimizer, *, warmup_pct, total_steps):
-        num_warmup_steps = int(warmup_pct * total_steps)
+    def get_lr_scheduler(
+        self, *, optimizer, type: str, warmup: float = None, total_steps: int = None, last_step: int = None
+    ):
+        assert type == "linear", "Currently, only linear schedules are supported"
+        assert warmup is not None, "Linear lr scheduler needs warmup percentage."
+        assert total_steps is not None, "Linear lr scheduler needs number of total steps to plan for."
 
-        def lr_lambda(current_step: int):
-            if current_step < num_warmup_steps:
-                return float(current_step) / float(max(1, num_warmup_steps))
-            return max(0.0, float(total_steps - current_step) / float(max(1, total_steps - num_warmup_steps)))
+        num_warmup_steps = int(warmup * total_steps)
 
-        return LambdaLR(optimizer, lr_lambda, -1)
+        def lr_lambda(step):
+            if step < num_warmup_steps:
+                return float(step) / float(max(1, num_warmup_steps))
+            return max(0.0, float(total_steps - step) / float(max(1, total_steps - num_warmup_steps)))
+
+        if last_step is None:
+            last_step = -1
+
+        return LambdaLR(optimizer, lr_lambda, last_step)
 
     def model_size(self):
         return sum(p.numel() for p in self.model.parameters())
@@ -79,7 +88,6 @@ class BaseTrainer:
         warmup_pct: float = 0.3,
         weight_decay: float = 0.01,
         gca_batches: int = 16,  # gradient accumulation batches
-        use_onecycle: bool = True,
         num_epochs: int = 5,
         growth_phases: int = 5,
         batch_size: int = 32,
@@ -90,6 +98,10 @@ class BaseTrainer:
         log_training_info=True,
         start_epoch: int = 0,
         global_step: int = 0,
+        lr_scheduler_type: str = None,
+        lr_scheduler_warmup: float = None,
+        lr_scheduler_num_epochs: int = None,
+        lr_scheduler_last_step: int = None,
         **kw,
     ):
 
@@ -97,10 +109,6 @@ class BaseTrainer:
 
         if log_training_info:
             log.info(f"Model: {self.model}")
-            log_line(log)
-            log.info("Parameters:")
-            log.info(f" - max_lr: {max_lr}")
-            log.info(f" - use_onecycle: {use_onecycle}")
             log_line(log)
 
         use_tensorboard = tensorboard_writer is not None
@@ -113,9 +121,22 @@ class BaseTrainer:
 
             batch_loader = self.get_batch_loader(train_data)
 
-            total_steps = 1 + (len(batch_loader) // gca_batches) * num_epochs
+            if lr_scheduler_type is not None:
 
-            scheduler = self.get_lr_scheduler(optimizer, total_steps=total_steps, warmup_pct=warmup_pct)
+                if lr_scheduler_num_epochs is not None:
+                    total_steps = 1 + (len(batch_loader) // gca_batches) * lr_scheduler_num_epochs
+                else:
+                    total_steps = 1 + (len(batch_loader) // gca_batches) * num_epochs
+
+                scheduler = self.get_lr_scheduler(
+                    optimizer=optimizer,
+                    type=lr_scheduler_type,
+                    total_steps=total_steps,
+                    warmup=lr_scheduler_warmup,
+                    last_step=lr_scheduler_last_step,
+                )
+            else:
+                scheduler = None
 
             # === START OF TRAINING LOOP ===
             for epoch in range(start_epoch, start_epoch + num_epochs):

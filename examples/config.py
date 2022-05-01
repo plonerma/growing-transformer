@@ -37,7 +37,6 @@ class Training:
     grow_data_portion: float
     grow_tune_params: Dict
     mlm_probability: float = 0.15
-    warmup_pct: float = 0.1
 
 
 @dataclass

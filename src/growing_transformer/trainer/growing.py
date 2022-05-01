@@ -2,7 +2,7 @@ import logging
 import re
 import time
 from contextlib import contextmanager
-from typing import Mapping, Optional
+from typing import Any, Dict, Mapping, Optional
 
 import torch
 
@@ -117,7 +117,7 @@ class GrowingTrainer(BaseTrainer):
 
             total_steps = num_epochs * len(grow_data) // (batch_size * gca_batches) + 1
 
-            scheduler = self.get_lr_scheduler(optimizer, total_steps=total_steps, warmup_pct=0.1)
+            scheduler = self.get_lr_scheduler(optimizer=optimizer, type="linear", total_steps=total_steps, warmup=0.1)
 
             log.info(f"Tuning for {num_epochs} epochs.")
 
@@ -232,7 +232,10 @@ class GrowingTrainer(BaseTrainer):
 
         global_step = 0
         current_epoch = 0
-        train_info = None
+        train_info = {
+            "global_step": 0,
+        }
+        lr_scheduler: Dict[str, Any] = {"type": None, "last_step": -1, "warmup": None}
 
         self.model.to(growing_transformer.device)
 
@@ -284,8 +287,13 @@ class GrowingTrainer(BaseTrainer):
                     log_training_info=False,
                     start_epoch=current_epoch,
                     global_step=global_step,
+                    lr_scheduler_type=lr_scheduler["type"],
+                    lr_scheduler_warmup=lr_scheduler["warmup"],
+                    lr_scheduler_num_epochs=lr_scheduler["num_epochs"],
+                    lr_scheduler_last_step=train_info["global_step"] - lr_scheduler["last_step"],
                     **train_params,
                 )
+
                 train_end = time.time()
 
                 current_epoch = train_info["epoch"]
@@ -300,6 +308,34 @@ class GrowingTrainer(BaseTrainer):
 
             elif step_type == step_type.checkpoint:
                 torch.save(self.model.state_dict(), f"checkpoints/checkpoint_{step_index}.pt")
+
+            elif step_type == step_type.lr_scheduler:
+                # calculate steps of all growth phases until another scheduler is defined
+                next_step = step_index + 1
+
+                if len(schedule) == next_step:
+                    # no more steps following
+                    continue
+                else:
+                    num_epochs = 0
+
+                    for (next_type, next_params) in schedule[next_step:]:
+                        if next_type == step_type.lr_scheduler:
+                            # stop once we encounter another scheduler
+                            break
+                        elif next_type == step_type.train:
+                            # add these training steps to the range of the current scheduler
+                            num_epochs += next_params["num_epochs"]
+
+                # set variables for lr_scheduler correctly
+                lr_scheduler.update(
+                    {
+                        "type": step_params["type"],
+                        "warmup": step_params["warmup"],
+                        "num_epochs": num_epochs,
+                        "last_step": train_info["global_step"],
+                    }
+                )
 
         return train_info
 

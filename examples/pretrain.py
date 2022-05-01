@@ -141,8 +141,6 @@ def main(cfg: Configuration):
         eps=cfg.training.eps,
         max_lr=cfg.training.learning_rate,
         weight_decay=cfg.training.weight_decay,
-        warmup_pct=cfg.training.warmup_pct,
-        use_onecycle=cfg.training.use_onecycle,
     )
 
     trainer = GrowingTrainer(model, data_collator=data_collator, **hparams_init)

@@ -54,6 +54,9 @@ growth_phase_b:
 
 
 steps:
+  - lr_scheduler:
+      type: linear
+      warump: 0.06
   - train:
       num_epochs: ${training.schedule.training_epochs}
   - checkpoint

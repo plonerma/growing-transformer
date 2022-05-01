@@ -35,6 +35,7 @@ class StepType(Enum):
     train = 0
     grow = 1
     checkpoint = 2
+    lr_scheduler = 3
 
 
 StepSpec = Union[Tuple[str, Any], List[Mapping[str, Any]], str]
@@ -60,6 +61,9 @@ class GrowthSchedule:
 
     def __iter__(self):
         return iter(self.steps)
+
+    def __getitem__(self, i):
+        return self.steps[i]
 
     def __str__(self):
         entries = "".join([f"  {step},\n" for step in self])
