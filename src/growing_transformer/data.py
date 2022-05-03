@@ -7,7 +7,11 @@ from torch.utils.data import Subset
 
 
 def tokenize_dataset(
-    tokenizer, dataset: Union[Dataset, DatasetDict], num_workers: int = None, ignore_cache: bool = False
+    tokenizer,
+    dataset: Union[Dataset, DatasetDict],
+    num_workers: int = None,
+    ignore_cache: bool = False,
+    add_special_tokens: bool = False,
 ):
     """Tokenize the complete dataset."""
     if isinstance(dataset, DatasetDict):
@@ -18,7 +22,11 @@ def tokenize_dataset(
     text_column_name = "text" if "text" in column_names else column_names[0]
 
     def tokenize_function(batch):
-        return tokenizer(batch[text_column_name], return_special_tokens_mask=True)
+        return tokenizer(
+            batch[text_column_name],
+            return_special_tokens_mask=add_special_tokens,
+            add_special_tokens=add_special_tokens,
+        )
 
     return dataset.map(
         tokenize_function,
@@ -64,6 +72,24 @@ def group_dataset(
         load_from_cache_file=(not ignore_cache),
         desc=f"Grouping texts in chunks of {max_seq_length}",
     )
+
+
+def prepare_mlm_dataset(
+    tokenizer, dataset, num_workers: int = None, ignore_cache: bool = False, max_seq_length: int = 512
+):
+    dataset = tokenize_dataset(
+        tokenizer=tokenizer,
+        dataset=dataset,
+        num_workers=num_workers,
+        ignore_cache=ignore_cache,
+        add_special_tokens=False,
+    )
+
+    dataset = group_dataset(
+        dataset=dataset, num_workers=num_workers, ignore_cache=ignore_cache, max_seq_length=max_seq_length
+    )
+
+    return dataset
 
 
 def downsample_dataset(data, proportion):

@@ -15,9 +15,8 @@ import growing_transformer
 from growing_transformer import GrowingConfig, GrowingTrainer, GrowthSchedule
 from growing_transformer.data import (
     downsample_dataset,
-    group_dataset,
+    prepare_mlm_dataset,
     split_dataset,
-    tokenize_dataset,
 )
 from growing_transformer.model import GrowingMLMTransformer
 
@@ -70,13 +69,17 @@ def main(cfg: Configuration):
         assert isinstance(raw_datasets, DatasetDict)
         assert "train" in raw_datasets, "Dataset does not contain train data."
 
-        # with accelerator.main_process_first():
-        tokenized_datasets = tokenize_dataset(
-            tokenizer, raw_datasets, num_workers=cfg.preprocessing_num_workers, ignore_cache=cfg.ignore_cache
-        )
+        if dataset_cfg.name == "wikitext":
+            # remove headings
+            def is_heading(text):
+                text = text.strip()
+                return text.startswith("=") and text.endswith("=")
 
-        tokenized_datasets = group_dataset(
-            tokenized_datasets,
+            raw_datasets = raw_datasets.filter(lambda sample: not is_heading(sample["text"]))
+
+        tokenized_datasets = prepare_mlm_dataset(
+            tokenizer=tokenizer,
+            dataset=raw_datasets,
             num_workers=cfg.preprocessing_num_workers,
             ignore_cache=cfg.ignore_cache,
             max_seq_length=max_seq_length,
