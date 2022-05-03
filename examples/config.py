@@ -29,7 +29,6 @@ class Training:
     betas: List[float]
     eps: float
     weight_decay: float
-    use_onecycle: bool
     growth_phases: int
     tune_direction: bool
     tune_step_size: bool

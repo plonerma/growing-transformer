@@ -1,4 +1,5 @@
 import logging
+import os
 import re
 import time
 from contextlib import contextmanager
@@ -232,9 +233,7 @@ class GrowingTrainer(BaseTrainer):
 
         global_step = 0
         current_epoch = 0
-        train_info = {
-            "global_step": 0,
-        }
+        train_info = {}
         lr_scheduler: Dict[str, Any] = {"type": None, "last_step": -1, "warmup": None}
 
         self.model.to(growing_transformer.device)
@@ -290,7 +289,7 @@ class GrowingTrainer(BaseTrainer):
                     lr_scheduler_type=lr_scheduler["type"],
                     lr_scheduler_warmup=lr_scheduler["warmup"],
                     lr_scheduler_num_epochs=lr_scheduler["num_epochs"],
-                    lr_scheduler_last_step=train_info["global_step"] - lr_scheduler["last_step"],
+                    lr_scheduler_last_step=global_step - lr_scheduler["start_step"] - 1,
                     **train_params,
                 )
 
@@ -307,7 +306,11 @@ class GrowingTrainer(BaseTrainer):
                 current_epoch += 1
 
             elif step_type == step_type.checkpoint:
-                torch.save(self.model.state_dict(), f"checkpoints/checkpoint_{step_index}.pt")
+                dir = "checkpoints"
+                os.makedirs(dir, exist_ok=True)
+                fn = f"{dir}/checkpoint_{step_index}.pt"
+                log.info(f"Saving checkpoint at '{fn}'")
+                torch.save(self.model.state_dict(), fn)
 
             elif step_type == step_type.lr_scheduler:
                 # calculate steps of all growth phases until another scheduler is defined
@@ -333,8 +336,14 @@ class GrowingTrainer(BaseTrainer):
                         "type": step_params["type"],
                         "warmup": step_params["warmup"],
                         "num_epochs": num_epochs,
-                        "last_step": train_info["global_step"],
+                        "start_step": global_step,
                     }
+                )
+
+                log.info(
+                    "Set up info for new scheduler ({type}, {warmup:.1%} warmup, for {num_epochs} epochs)".format(
+                        **lr_scheduler
+                    )
                 )
 
         return train_info

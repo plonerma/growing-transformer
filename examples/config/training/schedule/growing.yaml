@@ -1,29 +1,40 @@
 training_epochs: 2
 
+tune_params:
+  direction:
+    lr: 5e-3
+  step_size:
+    lr: 1e-3
+
 growth_phase_a:
   - match: .mlp
     split: True
     num_novel: 265
     num_keep: 256
+    tune_params: ${training.schedule.tune_params}
   - match: .attention.output
     # since there is no activation function bewtween the value and output layer
     # the split direction would just cancel out
     split: False
     num_novel: 16
     num_keep: 4
+    tune_params: ${training.schedule.tune_params}
   - match: .dot_product
     split: False  # splitting up key and query is equivalent to just adding new neurons
     num_novel: 16
     num_keep: 4
+    tune_params: ${training.schedule.tune_params}
   - match: .attention
     split: False
     num_novel: 4
     num_keep: 1
+    tune_params: ${training.schedule.tune_params}
   # encoder should be grown last, so that new layers are not grown (otherwise there are conflicts)
   - match: .encoder
     split: True
     num_novel: 0
     num_keep: 1
+    tune_params: ${training.schedule.tune_params}
 
 
 growth_phase_b:
@@ -31,24 +42,29 @@ growth_phase_b:
     split: True
     num_novel: 265
     num_keep: 256
+    tune_params: ${training.schedule.tune_params}
   - match: .attention.output
     # since there is no activation function bewtween the value and output layer
     # the split direction would just cancel out
     split: False
     num_novel: 16
     num_keep: 4
+    tune_params: ${training.schedule.tune_params}
   - match: .dot_product
     split: False  # splitting up key and query is equivalent to just adding new neurons
     num_novel: 16
     num_keep: 4
+    tune_params: ${training.schedule.tune_params}
   - match: .attention
     split: False
     num_novel: 4
     num_keep: 1
+    tune_params: ${training.schedule.tune_params}
   - match: .encoder
     split: True
     num_novel: 0
     num_keep: 1
+    tune_params: ${training.schedule.tune_params}
 
 
 
@@ -56,7 +72,7 @@ growth_phase_b:
 steps:
   - lr_scheduler:
       type: linear
-      warump: 0.06
+      warmup: 0.06
   - train:
       num_epochs: ${training.schedule.training_epochs}
   - checkpoint

@@ -85,7 +85,6 @@ class BaseTrainer:
         max_lr: float = 6e-4,
         betas: Tuple[float, float] = (0.9, 0.98),
         eps: float = 1e-06,
-        warmup_pct: float = 0.3,
         weight_decay: float = 0.01,
         gca_batches: int = 16,  # gradient accumulation batches
         num_epochs: int = 5,
@@ -99,7 +98,7 @@ class BaseTrainer:
         start_epoch: int = 0,
         global_step: int = 0,
         lr_scheduler_type: str = None,
-        lr_scheduler_warmup: float = None,
+        lr_scheduler_warmup: float = 0.3,
         lr_scheduler_num_epochs: int = None,
         lr_scheduler_last_step: int = None,
         **kw,
@@ -115,8 +114,12 @@ class BaseTrainer:
         eval_results = {}
 
         try:
-            optimizer = torch.optim.AdamW(
-                self.model.parameters(), lr=max_lr, betas=betas, eps=eps, weight_decay=weight_decay, **kw
+            optimizer = torch.optim.Adam(
+                [{"params": self.model.parameters(), "initial_lr": max_lr}],
+                betas=betas,
+                eps=eps,
+                weight_decay=weight_decay,
+                **kw,
             )
 
             batch_loader = self.get_batch_loader(train_data)
@@ -128,6 +131,10 @@ class BaseTrainer:
                 else:
                     total_steps = 1 + (len(batch_loader) // gca_batches) * num_epochs
 
+                log.info(
+                    f"Scheduler: {lr_scheduler_type}, {total_steps} steps, {lr_scheduler_warmup:.1%} warmup, last step: {lr_scheduler_last_step}"
+                )
+
                 scheduler = self.get_lr_scheduler(
                     optimizer=optimizer,
                     type=lr_scheduler_type,
@@ -138,6 +145,7 @@ class BaseTrainer:
             else:
                 scheduler = None
 
+            log_line(log)
             # === START OF TRAINING LOOP ===
             for epoch in range(start_epoch, start_epoch + num_epochs):
                 log.info(f"Epoch #{epoch:02}")
