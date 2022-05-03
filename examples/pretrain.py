@@ -143,7 +143,34 @@ def main(cfg: Configuration):
         weight_decay=cfg.training.weight_decay,
     )
 
-    trainer = GrowingTrainer(model, data_collator=data_collator, **hparams_init)
+    def custom_eval(self, global_step=None):
+        num_examples = 8
+
+        with torch.no_grad():
+            batch_loader = self.get_batch_loader(test_data, batch_size=num_examples, num_workers=0, shuffle=False)
+
+            for batch in batch_loader:
+                batch = self.prepare_batch(batch)
+
+                outputs = self.model(**batch)
+                prediction_scores = outputs[1]
+                predictions = prediction_scores.argmax(-1)
+
+                labels = batch["labels"]
+                mlm_mask = labels >= 0
+
+                masked_sentence = tokenizer.batch_decode(batch["input_ids"])
+                correct_sentence = tokenizer.batch_decode(torch.where(mlm_mask, labels, batch["input_ids"]))
+                predicted_sentence = tokenizer.batch_decode(torch.where(mlm_mask, predictions, batch["input_ids"]))
+
+                for i in range(num_examples):
+                    tensorboard_writer.add_text(f"example {i}, masked sentence", masked_sentence[i], global_step)
+                    tensorboard_writer.add_text(f"example {i}, correct sentence", correct_sentence[i], global_step)
+                    tensorboard_writer.add_text(f"example {i}, predicted sentence", predicted_sentence[i], global_step)
+
+                break
+
+    trainer = GrowingTrainer(model, data_collator=data_collator, custom_eval=custom_eval, **hparams_init)
 
     results = trainer.train(
         train_data=train_data,

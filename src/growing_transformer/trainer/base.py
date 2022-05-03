@@ -1,7 +1,7 @@
 import logging
 import math
 import time
-from typing import Dict, Mapping, Optional, Tuple
+from typing import Dict, Optional, Tuple
 
 import datasets
 import torch
@@ -25,6 +25,7 @@ class BaseTrainer:
         metric: Optional[datasets.Metric] = None,
         num_workers: int = None,
         batch_size: int = 16,
+        custom_eval=None,
     ):
         self.model = model
         self.data_collator = data_collator
@@ -40,6 +41,7 @@ class BaseTrainer:
             self.num_workers = num_workers
 
         self.batch_size = batch_size
+        self.custom_eval = custom_eval
 
     def get_batch_loader(self, data, *, batch_size=None, num_workers=None, shuffle=True):
         if num_workers is None:
@@ -244,7 +246,14 @@ class BaseTrainer:
         outputs = self.model(**batch)
         return outputs.loss
 
-    def track_evaluation(self, eval_results: Mapping, global_step: int = None, tensorboard_writer=None):
+    def track_evaluation(self, eval_results: Dict, global_step: int = None, tensorboard_writer=None):
+        with torch.no_grad():
+            if self.custom_eval is not None:
+                r = self.custom_eval(self, global_step=global_step)
+                if r is not None:
+                    assert isinstance(r, dict)
+                    eval_results.update(r)
+
         for k, v in eval_results.items():
             log.info(f"Eval {k}: {v:.4}")
             if tensorboard_writer is not None:
