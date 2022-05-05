@@ -1,8 +1,8 @@
-num_epochs: 30
+num_epochs: 50
 
 steps:
   - lr_scheduler:
       type: linear
-      warmup: 0.06
+      warmup_steps: 10000
   - train:
       num_epochs: ${training.schedule.num_epochs}

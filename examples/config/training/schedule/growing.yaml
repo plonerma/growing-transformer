@@ -72,7 +72,7 @@ growth_phase_b:
 steps:
   - lr_scheduler:
       type: linear
-      warmup: 0.06
+      warmup_steps: 10000
   - train:
       num_epochs: ${training.schedule.training_epochs}
   - checkpoint

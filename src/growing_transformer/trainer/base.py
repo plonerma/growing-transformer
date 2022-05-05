@@ -59,18 +59,16 @@ class BaseTrainer:
         )
 
     def get_lr_scheduler(
-        self, *, optimizer, type: str, warmup: float = None, total_steps: int = None, last_step: int = None
+        self, *, optimizer, type: str, warmup_steps: int = None, total_steps: int = None, last_step: int = None
     ):
         assert type == "linear", "Currently, only linear schedules are supported"
-        assert warmup is not None, "Linear lr scheduler needs warmup percentage."
+        assert warmup_steps is not None, "Linear lr scheduler needs number of warmup steps."
         assert total_steps is not None, "Linear lr scheduler needs number of total steps to plan for."
 
-        num_warmup_steps = int(warmup * total_steps)
-
         def lr_lambda(step):
-            if step < num_warmup_steps:
-                return float(step) / float(max(1, num_warmup_steps))
-            return max(0.0, float(total_steps - step) / float(max(1, total_steps - num_warmup_steps)))
+            if step < warmup_steps:
+                return float(step) / float(max(1, warmup_steps))
+            return max(0.0, float(total_steps - step) / float(max(1, total_steps - warmup_steps)))
 
         if last_step is None:
             last_step = -1
@@ -100,7 +98,8 @@ class BaseTrainer:
         start_epoch: int = 0,
         global_step: int = 0,
         lr_scheduler_type: str = None,
-        lr_scheduler_warmup: float = 0.3,
+        lr_scheduler_warmup_steps: int = None,
+        lr_scheduler_warmup_portion: float = None,
         lr_scheduler_num_epochs: int = None,
         lr_scheduler_last_step: int = None,
         **kw,
@@ -133,15 +132,24 @@ class BaseTrainer:
                 else:
                     total_steps = 1 + (len(batch_loader) // gca_batches) * num_epochs
 
+                warmup_steps: Optional[int]
+                if lr_scheduler_warmup_steps is None and lr_scheduler_warmup_portion is not None:
+                    warmup_steps = int(total_steps * lr_scheduler_warmup_portion)
+                    warmup_info = f"{lr_scheduler_warmup_portion:.1%} ({warmup_steps} steps) warmup"
+
+                else:
+                    warmup_steps = lr_scheduler_warmup_steps
+                    warmup_info = f"{warmup_steps} steps warmup"
+
                 log.info(
-                    f"Scheduler: {lr_scheduler_type}, {total_steps} steps, {lr_scheduler_warmup:.1%} warmup, last step: {lr_scheduler_last_step}"
+                    f"Scheduler: {lr_scheduler_type}, {total_steps} steps, {warmup_info}, last step: {lr_scheduler_last_step}"
                 )
 
                 scheduler = self.get_lr_scheduler(
                     optimizer=optimizer,
                     type=lr_scheduler_type,
                     total_steps=total_steps,
-                    warmup=lr_scheduler_warmup,
+                    warmup_steps=warmup_steps,
                     last_step=lr_scheduler_last_step,
                 )
             else:

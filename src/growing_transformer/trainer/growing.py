@@ -118,7 +118,9 @@ class GrowingTrainer(BaseTrainer):
 
             total_steps = num_epochs * len(grow_data) // (batch_size * gca_batches) + 1
 
-            scheduler = self.get_lr_scheduler(optimizer=optimizer, type="linear", total_steps=total_steps, warmup=0.1)
+            scheduler = self.get_lr_scheduler(
+                optimizer=optimizer, type="linear", total_steps=total_steps, warmup_steps=int(0.1 * total_steps)
+            )
 
             log.info(f"Tuning for {num_epochs} epochs.")
 
@@ -234,7 +236,7 @@ class GrowingTrainer(BaseTrainer):
         global_step = 0
         current_epoch = 0
         train_info = {}
-        lr_scheduler: Dict[str, Any] = {"type": None, "last_step": -1, "warmup": None}
+        lr_scheduler: Dict[str, Any] = {"type": None, "last_step": -1, "warmup_portion": None, "warmup_steps": None}
 
         self.model.to(growing_transformer.device)
 
@@ -287,7 +289,8 @@ class GrowingTrainer(BaseTrainer):
                     start_epoch=current_epoch,
                     global_step=global_step,
                     lr_scheduler_type=lr_scheduler["type"],
-                    lr_scheduler_warmup=lr_scheduler["warmup"],
+                    lr_scheduler_warmup_steps=lr_scheduler["warmup_steps"],
+                    lr_scheduler_warmup_portion=lr_scheduler["warmup_portion"],
                     lr_scheduler_num_epochs=lr_scheduler["num_epochs"],
                     lr_scheduler_last_step=global_step - lr_scheduler["start_step"] - 1,
                     **train_params,
@@ -334,16 +337,11 @@ class GrowingTrainer(BaseTrainer):
                 lr_scheduler.update(
                     {
                         "type": step_params["type"],
-                        "warmup": step_params["warmup"],
+                        "warmup_steps": step_params.get("warmup_steps"),
+                        "warmup_portion": step_params.get("warmup_portion"),
                         "num_epochs": num_epochs,
                         "start_step": global_step,
                     }
-                )
-
-                log.info(
-                    "Set up info for new scheduler ({type}, {warmup:.1%} warmup, for {num_epochs} epochs)".format(
-                        **lr_scheduler
-                    )
                 )
 
         return train_info
