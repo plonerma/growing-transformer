@@ -29,13 +29,13 @@ class Training:
     betas: List[float]
     eps: float
     weight_decay: float
-    growth_phases: int
     tune_direction: bool
     tune_step_size: bool
     selection_method: str
     grow_data_portion: float
     grow_tune_params: Dict
     mlm_probability: float = 0.15
+    gradient_clipping: Optional[float] = None
 
 
 @dataclass

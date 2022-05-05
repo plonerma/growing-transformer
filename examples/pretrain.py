@@ -144,6 +144,7 @@ def main(cfg: Configuration):
         eps=cfg.training.eps,
         max_lr=cfg.training.learning_rate,
         weight_decay=cfg.training.weight_decay,
+        gradient_clipping=cfg.training.gradient_clipping,
     )
 
     def custom_eval(self, global_step=None):

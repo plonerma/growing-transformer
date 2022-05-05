@@ -86,9 +86,9 @@ class BaseTrainer:
         betas: Tuple[float, float] = (0.9, 0.98),
         eps: float = 1e-06,
         weight_decay: float = 0.01,
+        gradient_clipping: float = None,
         gca_batches: int = 16,  # gradient accumulation batches
         num_epochs: int = 5,
-        growth_phases: int = 5,
         batch_size: int = 32,
         shuffle: bool = True,
         num_workers: Optional[int] = None,
@@ -197,20 +197,21 @@ class BaseTrainer:
                         tensorboard_writer.add_scalar("epochs_completed", epoch, global_step)
 
                 accumulated_batch_loss = 0
-                epoch_loss = 0
 
                 optimizer.zero_grad()
                 for batch_index, batch in enumerate(batch_loader, start=1):
                     loss = self.forward_loss(batch)
+                    loss = loss / gca_batches
 
-                    epoch_loss += loss.detach().float()
                     accumulated_batch_loss += loss.detach().float()
 
-                    loss = loss / gca_batches
                     loss.backward()
 
                     if batch_index % gca_batches == 0:
                         global_step += 1
+
+                        if gradient_clipping is not None:
+                            torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=gradient_clipping)
 
                         optimizer.step()
 
@@ -220,27 +221,20 @@ class BaseTrainer:
                         optimizer.zero_grad()
 
                         if use_tensorboard:
-                            tensorboard_writer.add_scalar(
-                                "loss/train_loss_batch", accumulated_batch_loss / gca_batches, global_step
-                            )
+                            tensorboard_writer.add_scalar("loss/train_loss_batch", accumulated_batch_loss, global_step)
                             for i, lr in enumerate(scheduler.get_last_lr()):
                                 tensorboard_writer.add_scalar(f"learning_rate/{i}", lr, global_step)
 
                         accumulated_batch_loss = 0
 
-                loss = epoch_loss / batch_index
                 epoch_end = time.time()
 
                 if use_tensorboard:
 
                     tensorboard_writer.add_scalar("epochs_completed", epoch + 1, global_step)
-
-                    tensorboard_writer.add_scalar("loss/train_epoch_epoch", loss, global_step)
                     tensorboard_writer.add_scalar("model size/current", self.model_size(), global_step)
-
                     tensorboard_writer.add_scalar("time/epoch", epoch_end - epoch_start, global_step)
 
-                log.info(f"Train loss: {loss:.4}")
                 if test_data is not None:
                     eval_results = self.evaluate(test_data, batch_size=batch_size, num_workers=num_workers)
                     self.track_evaluation(eval_results, global_step, tensorboard_writer=tensorboard_writer)
@@ -260,7 +254,6 @@ class BaseTrainer:
                 log.warning("Exiting from training early.")
 
         results = dict(
-            final_train_loss=loss,
             epoch=epoch,
             total_steps=(num_epochs * len(batch_loader)) // gca_batches,
             global_step=global_step,

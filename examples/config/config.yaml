@@ -4,6 +4,7 @@ defaults:
       - wiki_big
   - model: static
   - training: static
+  - _self_
 
 save_model: True
 preprocessing_num_workers: 4
