@@ -1,7 +1,7 @@
 import logging
 import math
 import time
-from typing import Dict, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 
 import datasets
 import torch
@@ -97,6 +97,7 @@ class BaseTrainer:
         log_training_info=True,
         start_epoch: int = 0,
         global_step: int = 0,
+        no_decay: List[str] = ["bias", "layer_norm.weight", "LayerNorm.weight"],
         lr_scheduler_type: str = None,
         lr_scheduler_warmup_steps: int = None,
         lr_scheduler_warmup_portion: float = None,
@@ -115,11 +116,36 @@ class BaseTrainer:
         eval_results = {}
 
         try:
-            optimizer = torch.optim.Adam(
-                [{"params": self.model.parameters(), "initial_lr": max_lr}],
+            lr_key = "initial_lr" if lr_scheduler_type is not None else "lr"
+
+            # separate parameters into those with and without weight decay
+            param_groups = [
+                # parameters with weight decay
+                {
+                    "params": [
+                        p
+                        for name, p in self.model.named_parameters()
+                        if not any(name.endswith(suffix) for suffix in no_decay)
+                    ],
+                    "weight_decay": weight_decay,
+                    lr_key: max_lr,
+                },
+                # parameters without weight decay
+                {
+                    "params": [
+                        p
+                        for name, p in self.model.named_parameters()
+                        if any(name.endswith(suffix) for suffix in no_decay)
+                    ],
+                    "weight_decay": 0.0,
+                    lr_key: max_lr,
+                },
+            ]
+
+            optimizer = torch.optim.AdamW(
+                param_groups,
                 betas=betas,
                 eps=eps,
-                weight_decay=weight_decay,
                 **kw,
             )
 
