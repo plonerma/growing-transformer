@@ -5,6 +5,7 @@ from typing import Any, Dict, Union
 import datasets
 import hydra
 import torch
+from torch import nn
 from config import Configuration
 from datasets import DatasetDict
 from hydra.core.config_store import ConfigStore
@@ -22,6 +23,35 @@ from growing_transformer.model import GrowingMLMTransformer
 
 cs = ConfigStore.instance()
 cs.store(name="base_config", node=Configuration)
+
+
+use_truncated_normal = True
+
+def truncated_normal_(tensor, mean=0, std=1):
+    """Source: https://discuss.pytorch.org/t/implementing-truncated-normal-initializer/4778/16"""
+    size = tensor.shape
+    tmp = tensor.new_empty(size + (4,)).normal_()
+    valid = (tmp < 2) & (tmp > -2)
+    ind = valid.max(-1, keepdim=True)[1]
+    tensor.data.copy_(tmp.gather(-1, ind).squeeze(-1))
+    tensor.data.mul_(std).add_(mean)
+
+class HuggingfaceMLMTransformer(BertForMaskedLM):
+    def _init_weights(self, module):
+        """Initialize the weights"""
+        if isinstance(module, nn.Linear):
+            truncated_normal_(module.weight.data, mean=0.0, std=self.config.initializer_range)
+            if module.bias is not None:
+                module.bias.data.zero_()
+        elif isinstance(module, nn.Embedding):
+            truncated_normal_(module.weight.data, mean=0.0, std=self.config.initializer_range)
+            if module.padding_idx is not None:
+                module.weight.data[module.padding_idx].zero_()
+        elif isinstance(module, nn.LayerNorm):
+            module.bias.data.zero_()
+            module.weight.data.fill_(1.0)
+
+
 
 
 @hydra.main(config_path="config", config_name="config")
@@ -118,7 +148,10 @@ def main(cfg: Configuration):
         model = GrowingMLMTransformer(model_config)
 
     elif cfg.model.type == "huggingface":
-        model = BertForMaskedLM(model_config)
+        if use_truncated_normal:
+            model = HuggingfaceMLMTransformer(model_config)
+        else:
+            model = BertForMaskedLM(model_config)
 
     else:
         raise RuntimeError(f"Model variant {cfg.model.type} not implemented.")
