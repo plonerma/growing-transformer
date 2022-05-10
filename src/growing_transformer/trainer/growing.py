@@ -289,10 +289,10 @@ class GrowingTrainer(BaseTrainer):
                     start_epoch=current_epoch,
                     global_step=global_step,
                     lr_scheduler_type=lr_scheduler["type"],
-                    lr_scheduler_warmup_steps=lr_scheduler["warmup_steps"],
-                    lr_scheduler_warmup_portion=lr_scheduler["warmup_portion"],
-                    lr_scheduler_num_epochs=lr_scheduler["num_epochs"],
-                    lr_scheduler_last_step=global_step - lr_scheduler["start_step"] - 1,
+                    lr_scheduler_warmup_steps=lr_scheduler.get("warmup_steps"),
+                    lr_scheduler_warmup_portion=lr_scheduler.get("warmup_portion"),
+                    lr_scheduler_num_epochs=lr_scheduler.get("num_epochs"),
+                    lr_scheduler_last_step=global_step - lr_scheduler.get("start_step", 0) - 1,
                     **train_params,
                 )
 

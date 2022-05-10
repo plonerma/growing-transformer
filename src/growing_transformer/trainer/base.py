@@ -61,19 +61,23 @@ class BaseTrainer:
     def get_lr_scheduler(
         self, *, optimizer, type: str, warmup_steps: int = None, total_steps: int = None, last_step: int = None
     ):
-        assert type == "linear", "Currently, only linear schedules are supported"
-        assert warmup_steps is not None, "Linear lr scheduler needs number of warmup steps."
-        assert total_steps is not None, "Linear lr scheduler needs number of total steps to plan for."
+        if type == "constant":
+            return LambdaLR(optimizer, lambda step: 1, last_step)
+        elif type == "linear":
+            assert warmup_steps is not None, "Linear lr scheduler needs number of warmup steps."
+            assert total_steps is not None, "Linear lr scheduler needs number of total steps to plan for."
 
-        def lr_lambda(step):
-            if step < warmup_steps:
-                return float(step) / float(max(1, warmup_steps))
-            return max(0.0, float(total_steps - step) / float(max(1, total_steps - warmup_steps)))
+            def lr_lambda(step):
+                if step < warmup_steps:
+                    return float(step) / float(max(1, warmup_steps))
+                return max(0.0, float(total_steps - step) / float(max(1, total_steps - warmup_steps)))
 
-        if last_step is None:
-            last_step = -1
+            if last_step is None:
+                last_step = -1
 
-        return LambdaLR(optimizer, lr_lambda, last_step)
+            return LambdaLR(optimizer, lr_lambda, last_step)
+        else:
+            raise KeyError(f"Scheduler {type} not implemented.")
 
     def model_size(self):
         return sum(p.numel() for p in self.model.parameters())
@@ -116,7 +120,8 @@ class BaseTrainer:
         eval_results = {}
 
         try:
-            lr_key = "initial_lr" if lr_scheduler_type is not None else "lr"
+            if lr_scheduler_type is None:
+                lr_scheduler_type = "constant"
 
             # separate parameters into those with and without weight decay
             param_groups = [
@@ -128,7 +133,7 @@ class BaseTrainer:
                         if not any(name.endswith(suffix) for suffix in no_decay)
                     ],
                     "weight_decay": weight_decay,
-                    lr_key: max_lr,
+                    "initial_lr": max_lr,
                 },
                 # parameters without weight decay
                 {
@@ -138,7 +143,7 @@ class BaseTrainer:
                         if any(name.endswith(suffix) for suffix in no_decay)
                     ],
                     "weight_decay": 0.0,
-                    lr_key: max_lr,
+                    "initial_lr": max_lr,
                 },
             ]
 
