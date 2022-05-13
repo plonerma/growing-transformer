@@ -144,7 +144,7 @@ def main(cfg: Configuration):
     else:
         train_data, test_data = loaded_datasets[0]
 
-    model: Union[GrowingMLMTransformer, BertForMaskedLM]
+    model: torch.nn.Module
 
     if cfg.model.type == "growing":
         model = GrowingMLMTransformer(model_config)
