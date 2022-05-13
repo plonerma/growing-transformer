@@ -1,6 +1,7 @@
 import argparse
 import logging
 from datetime import datetime
+from pathlib import Path
 
 import torch
 from torch.utils.tensorboard import SummaryWriter
@@ -25,6 +26,8 @@ def parse_args():
     parser.add_argument("--epochs", type=float, help="number of epochs", default=10)
     parser.add_argument("--warmup_pct", type=float, help="warmup time (as float < 1.0)", default=0.06)
     parser.add_argument("--gca", type=float, help="number of batches to accumulate for each update step", default=2)
+    parser.add_argument("--load_model", type=Path, help="where to loade the model from", default=None)
+    parser.add_argument("--save_model", type=Path, help="where to save the fine tuned model", default=None)
     parser.add_argument(
         "--batch", type=float, help="batch size (multiple batches may be accumulated using --gca)", default=16
     )
@@ -47,8 +50,11 @@ def main(args):
 
     dataset, metric, num_labels = load_glue_task(args.task, tokenizer)
 
-    # an example model
-    model = BertForSequenceClassification.from_pretrained("bert-base-uncased", num_labels=num_labels)
+    if args.load_model is not None:
+        model = BertForSequenceClassification.from_pretrained(args.load_model, num_labels=num_labels)
+    else:
+        # an example model
+        model = BertForSequenceClassification.from_pretrained("bert-base-uncased", num_labels=num_labels)
 
     trainer = Trainer(
         model,
@@ -70,6 +76,9 @@ def main(args):
         warmup_pct=args.warmup_pct,
         tensorboard_writer=tensorboard_writer,
     )
+
+    if args.save_model is not None:
+        torch.save(model.state_dict(), parser.save_model)
 
 
 if __name__ == "__main__":
