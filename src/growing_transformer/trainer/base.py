@@ -101,6 +101,7 @@ class BaseTrainer:
         log_training_info=True,
         start_epoch: int = 0,
         global_step: int = 0,
+        quit_on_step: int = None,
         no_decay: List[str] = ["bias", "layer_norm.weight", "LayerNorm.weight"],
         lr_scheduler_type: str = None,
         lr_scheduler_warmup_steps: int = None,
@@ -154,6 +155,8 @@ class BaseTrainer:
                 **kw,
             )
 
+            scaler = torch.cuda.amp.GradScaler()
+
             batch_loader = self.get_batch_loader(train_data)
 
             if lr_scheduler_type is not None:
@@ -173,7 +176,7 @@ class BaseTrainer:
                     warmup_info = f"{warmup_steps} steps warmup"
 
                 log.info(
-                    f"Scheduler: {lr_scheduler_type}, {total_steps} steps, {warmup_info}, last step: {lr_scheduler_last_step}"
+                    f"Scheduler: {lr_scheduler_type}, {total_steps} steps total, {warmup_info}, last step: {lr_scheduler_last_step}"
                 )
 
                 scheduler = self.get_lr_scheduler(
@@ -205,25 +208,27 @@ class BaseTrainer:
 
                 optimizer.zero_grad()
                 for batch_index, batch in enumerate(batch_loader, start=1):
-                    loss = self.forward_loss(batch)
-                    loss = loss / gca_batches
 
-                    accumulated_batch_loss += loss.detach().float()
+                    with torch.cuda.amp.autocast():
+                        loss = self.forward_loss(batch)
+                        loss = loss / gca_batches
 
-                    loss.backward()
+                        accumulated_batch_loss += loss.detach().float()
 
-                    if batch_index % gca_batches == 0:
+                    scaler.scale(loss).backward()
+
+                    if (batch_index % gca_batches == 0) or (batch_index == len(batch_loader)):
                         global_step += 1
 
-                        if gradient_clipping is not None:
-                            torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=gradient_clipping)
+                        # if gradient_clipping is not None:
+                        #    torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=gradient_clipping)
 
-                        optimizer.step()
+                        scaler.step(optimizer)
+                        scaler.update()
+                        optimizer.zero_grad()
 
                         if scheduler is not None:
                             scheduler.step()
-
-                        optimizer.zero_grad()
 
                         if use_tensorboard:
                             tensorboard_writer.add_scalar("loss/train_loss_batch", accumulated_batch_loss, global_step)
@@ -231,6 +236,9 @@ class BaseTrainer:
                                 tensorboard_writer.add_scalar(f"learning_rate/{i}", lr, global_step)
 
                         accumulated_batch_loss = 0
+
+                        if quit_on_step is not None and global_step == quit_on_step:
+                            raise KeyboardInterrupt
 
                 epoch_end = time.time()
 
@@ -264,9 +272,6 @@ class BaseTrainer:
             global_step=global_step,
             **eval_results,
         )
-
-        if test_data:
-            results.update(eval_results)
 
         return results
 

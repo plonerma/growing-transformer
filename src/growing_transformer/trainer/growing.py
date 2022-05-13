@@ -9,7 +9,7 @@ import torch
 
 import growing_transformer
 
-from ..data import downsample_dataset
+from ..data import downsample_dataset, split_dataset
 from ..model import GrowingModule
 from .base import BaseTrainer
 from .schedule import GrowthSchedule
@@ -34,13 +34,14 @@ class GrowingTrainer(BaseTrainer):
         grow_data=None,
         tensorboard_writer=None,
         index=None,
-        batch_size: int = 32,
+        batch_size: int = None,
         gca_batches: int = 1,
         use_onecycle: int = 1,
         num_epochs: int = 1,
         shuffle=True,
         num_workers: Optional[int] = None,
         track_tuned_steps=True,
+        grow_select_portion=0.2,
         **optimizer_params,
     ):
         log.info("Growing model")
@@ -50,6 +51,9 @@ class GrowingTrainer(BaseTrainer):
 
         start_size = self.model_size()
         log.info(f"Model size currently: {start_size}")
+
+        if batch_size is None:
+            batch_size = self.batch_size
 
         for conf in substeps:
             if conf.get("match_end", True):
@@ -85,17 +89,15 @@ class GrowingTrainer(BaseTrainer):
         if self._tune_direction or self._tune_step_size:
             assert grow_data is not None
 
-            tuned_str = []
-            if self._tune_direction:
-                tuned_str.append("direction")
-            if self._tune_step_size:
-                tuned_str.append("step_size")
+            grow_tune_data, grow_select_data = split_dataset(grow_data, grow_select_portion)
 
-            log.info(f"Tuning {' and '.join(tuned_str)}")
+            is_tuned = {"direction": self._tune_direction, "step_size": self._tune_step_size}
+            tuned_str = " and ".join((k for k, v in is_tuned.items() if v))
+
+            log.info(f"Tuning {tuned_str}")
             log.info(f"- gca_batches: {gca_batches}")
             log.info(f"- batch_size: {batch_size}")
             log.info(f"- num_epochs: {num_epochs}")
-            log.info(f"- use_onecycle: {use_onecycle}")
 
             param_groups = list()
             relevant_params = list()
@@ -122,20 +124,25 @@ class GrowingTrainer(BaseTrainer):
                 optimizer=optimizer, type="linear", total_steps=total_steps, warmup_steps=int(0.1 * total_steps)
             )
 
+            scaler = torch.cuda.amp.GradScaler()
+
             log.info(f"Tuning for {num_epochs} epochs.")
 
             with self.some_grad_only(*relevant_params):
                 for epoch in range(num_epochs):
-                    batch_loader = self.get_batch_loader(grow_data)
+                    batch_loader = self.get_batch_loader(grow_tune_data, batch_size=batch_size)
 
                     optimizer.zero_grad()
 
                     step_loss = 0.0
 
                     for batch_index, batch in enumerate(batch_loader, start=1):
-                        loss = self.forward_loss(batch)
-                        loss.backward()
-                        step_loss += loss.detach()
+                        with torch.cuda.amp.autocast():
+
+                            loss = self.forward_loss(batch)
+                            step_loss += loss.detach()
+
+                        scaler.scale(loss).backward()
 
                         if batch_index % gca_batches == 0:
 
@@ -159,19 +166,23 @@ class GrowingTrainer(BaseTrainer):
                                                 f"step_sizes/grad {index}/{n}", m.step_size.grad, tune_step
                                             )
 
-                            optimizer.step()
+                            scaler.step(optimizer)
+                            scaler.update()
 
                             if scheduler is not None:
                                 scheduler.step()
 
                             optimizer.zero_grad()
                             step_loss = 0.0
+        else:
+            grow_select_data = grow_data
 
         log.info(f"Selecting neurons to keep using {self._selection_method }")
 
         # === Select neurons ===
         if self._selection_method == "firefly":
-            self.calculate_step_gradient(grow_data, batch_size=256)
+
+            self.calculate_step_gradient(grow_select_data, batch_size=batch_size)
 
             for m, size, conf in grown_modules:
                 num_kept_parts = conf["num_keep"]
@@ -219,130 +230,142 @@ class GrowingTrainer(BaseTrainer):
         batch_size: int = 32,
         shuffle: bool = True,
         num_workers: Optional[int] = None,
-        propagate_interrupt=False,
         tensorboard_writer=None,
         log_training_info=True,
         grow_tune_params: Mapping = {},
         **kw,
     ):
-        if log_training_info:
+        try:
+            if log_training_info:
 
-            log.info(f"Model: {self.model}")
-            log_line(log)
-            log.info(f" - growth phases: {len(schedule)}")
-            log.info(f" - number of samples: {len(train_data)}")
-            log_line(log)
+                log.info(f"Model: {self.model}")
+                log_line(log)
+                log.info(f" - growth phases: {len(schedule)}")
+                log.info(f" - number of samples: {len(train_data)}")
+                log_line(log)
 
-        global_step = 0
-        current_epoch = 0
-        train_info = {}
-        lr_scheduler: Dict[str, Any] = {"type": None, "last_step": -1, "warmup_portion": None, "warmup_steps": None}
+            global_step = 0
+            current_epoch = 0
+            train_info = {}
+            lr_scheduler: Dict[str, Any] = {"type": None, "last_step": -1, "warmup_portion": None, "warmup_steps": None}
 
-        self.model.to(growing_transformer.device)
+            self.model.to(growing_transformer.device)
 
-        if tensorboard_writer is not None:
-            tensorboard_writer.add_scalar("model size/current", self.model_size(), global_step)
-
-        for step_index, (step_type, step_params) in enumerate(schedule):
-            if step_type == step_type.grow:
-                if grow_data is None:
-                    _grow_data = train_data
-                else:
-                    _grow_data = grow_data
-
-                if grow_data_portion is not None and grow_data_portion < 1.0:
-                    log.info("Downsampling grow data")
-                    _grow_data = downsample_dataset(_grow_data, grow_data_portion)
-
-                log.info(f"{len(_grow_data)} samples used for tuning growth.")
-
-                grow_start = time.time()
-                self.grow_model(
-                    step_params,
-                    grow_data=_grow_data,
-                    tensorboard_writer=tensorboard_writer,
-                    index=step_index,
-                    num_workers=num_workers,
-                    **grow_tune_params,
-                )
-                grow_end = time.time()
-
+            for step_index, (step_type, step_params) in enumerate(schedule):
                 if tensorboard_writer is not None:
-                    tensorboard_writer.add_scalar("time/growth", grow_end - grow_start, global_step)
-
                     tensorboard_writer.add_scalar("model size/current", self.model_size(), global_step)
 
-            elif step_type == step_type.train:
-                train_params = {**kw, **step_params}
+                if step_type == step_type.grow:
+                    if grow_data is None:
+                        _grow_data = train_data
+                    else:
+                        _grow_data = grow_data
 
-                train_start = time.time()
+                    if grow_data_portion is not None and grow_data_portion < 1.0:
+                        log.info("Downsampling grow data")
+                        _grow_data = downsample_dataset(_grow_data, grow_data_portion)
 
-                train_info = super().train(
-                    train_data=train_data,
-                    test_data=test_data,
-                    batch_size=batch_size,
-                    shuffle=shuffle,
-                    num_workers=num_workers,
-                    propagate_interrupt=propagate_interrupt,
-                    tensorboard_writer=tensorboard_writer,
-                    log_training_info=False,
-                    start_epoch=current_epoch,
-                    global_step=global_step,
-                    lr_scheduler_type=lr_scheduler["type"],
-                    lr_scheduler_warmup_steps=lr_scheduler.get("warmup_steps"),
-                    lr_scheduler_warmup_portion=lr_scheduler.get("warmup_portion"),
-                    lr_scheduler_num_epochs=lr_scheduler.get("num_epochs"),
-                    lr_scheduler_last_step=global_step - lr_scheduler.get("start_step", 0) - 1,
-                    **train_params,
-                )
+                    log.info(f"{len(_grow_data)} samples used for tuning growth.")
 
-                train_end = time.time()
+                    grow_start = time.time()
+                    self.grow_model(
+                        step_params,
+                        grow_data=_grow_data,
+                        tensorboard_writer=tensorboard_writer,
+                        index=step_index,
+                        num_workers=num_workers,
+                        **grow_tune_params,
+                    )
+                    grow_end = time.time()
 
-                current_epoch = train_info["epoch"]
-                global_step = train_info["global_step"]
+                    if tensorboard_writer is not None:
+                        tensorboard_writer.add_scalar("time/growth", grow_end - grow_start, global_step)
 
-                if tensorboard_writer is not None:
-                    tensorboard_writer.add_scalar("time/training", train_end - train_start, global_step)
+                        tensorboard_writer.add_scalar("model size/current", self.model_size(), global_step)
 
-                log.info(f"Epoch {current_epoch} - loss: {train_info['final_train_loss']}")
+                elif step_type == step_type.train:
+                    train_params = {**kw, **step_params}
 
-                current_epoch += 1
+                    train_start = time.time()
 
-            elif step_type == step_type.checkpoint:
-                dir = "checkpoints"
-                os.makedirs(dir, exist_ok=True)
-                fn = f"{dir}/checkpoint_{step_index}.pt"
-                log.info(f"Saving checkpoint at '{fn}'")
-                torch.save(self.model.state_dict(), fn)
+                    train_info = super().train(
+                        train_data=train_data,
+                        test_data=test_data,
+                        batch_size=batch_size,
+                        shuffle=shuffle,
+                        num_workers=num_workers,
+                        propagate_interrupt=True,
+                        tensorboard_writer=tensorboard_writer,
+                        log_training_info=False,
+                        start_epoch=current_epoch,
+                        global_step=global_step,
+                        lr_scheduler_type=lr_scheduler["type"],
+                        lr_scheduler_warmup_steps=lr_scheduler.get("warmup_steps"),
+                        lr_scheduler_warmup_portion=lr_scheduler.get("warmup_portion"),
+                        lr_scheduler_num_epochs=lr_scheduler.get("num_epochs"),
+                        lr_scheduler_last_step=global_step - lr_scheduler.get("start_step", 0) - 1,
+                        **train_params,
+                    )
 
-            elif step_type == step_type.lr_scheduler:
-                # calculate steps of all growth phases until another scheduler is defined
-                next_step = step_index + 1
+                    train_end = time.time()
 
-                if len(schedule) == next_step:
-                    # no more steps following
-                    continue
-                else:
-                    num_epochs = 0
+                    current_epoch = train_info["epoch"]
+                    global_step = train_info["global_step"]
 
-                    for (next_type, next_params) in schedule[next_step:]:
-                        if next_type == step_type.lr_scheduler:
-                            # stop once we encounter another scheduler
-                            break
-                        elif next_type == step_type.train:
-                            # add these training steps to the range of the current scheduler
-                            num_epochs += next_params["num_epochs"]
+                    if tensorboard_writer is not None:
+                        tensorboard_writer.add_scalar("time/training", train_end - train_start, global_step)
 
-                # set variables for lr_scheduler correctly
-                lr_scheduler.update(
-                    {
-                        "type": step_params["type"],
-                        "warmup_steps": step_params.get("warmup_steps"),
-                        "warmup_portion": step_params.get("warmup_portion"),
-                        "num_epochs": num_epochs,
-                        "start_step": global_step,
-                    }
-                )
+                    current_epoch += 1
+
+                elif step_type == step_type.checkpoint:
+                    dir = "checkpoints"
+                    os.makedirs(dir, exist_ok=True)
+                    fn = f"{dir}/checkpoint_{step_index}.pt"
+                    log.info(f"Saving checkpoint at '{fn}'")
+                    torch.save(self.model.state_dict(), fn)
+
+                elif step_type == step_type.lr_scheduler:
+                    # calculate steps of all growth phases until another scheduler is defined
+                    next_step = step_index + 1
+
+                    if len(schedule) == next_step:
+                        # no more steps following
+                        continue
+                    else:
+                        num_epochs = 0
+
+                        for (next_type, next_params) in schedule[next_step:]:
+                            if next_type == step_type.lr_scheduler:
+                                # stop once we encounter another scheduler
+                                break
+                            elif next_type == step_type.train:
+                                # add these training steps to the range of the current scheduler
+                                num_epochs += next_params["num_epochs"]
+
+                    # set variables for lr_scheduler correctly
+                    lr_scheduler.update(
+                        {
+                            "type": step_params["type"],
+                            "warmup_steps": step_params.get("warmup_steps"),
+                            "warmup_portion": step_params.get("warmup_portion"),
+                            "num_epochs": num_epochs,
+                            "start_step": global_step,
+                        }
+                    )
+        except KeyboardInterrupt:
+            log_line(log)
+
+            if propagate_interrupt:
+                log.warning("Exiting from training early.")
+                raise KeyboardInterrupt
+
+            if test_data is not None:
+                log.info("Evaluating after early termination:")
+                eval_results = self.evaluate(test_data)
+                self.track_evaluation(eval_results, global_step, tensorboard_writer=tensorboard_writer)
+                train_info.update(eval_results)
+            else:
+                log.warning("Exiting from training early.")
 
         return train_info
 
@@ -370,8 +393,13 @@ class GrowingTrainer(BaseTrainer):
         self, train_data, batch_size: int = 32, shuffle: bool = True, num_workers: Optional[int] = None
     ):
         with self.some_grad_only(*self.model.step_size_params()):
-            self.model.zero_grad()
+            self.model.zero_grad(set_to_none=True)
 
-            for batch in self.get_batch_loader(train_data):
+            #scaler = torch.cuda.amp.GradScaler()
+
+            for batch in self.get_batch_loader(train_data, batch_size=batch_size):
+                #with torch.cuda.amp.autocast():
                 loss = self.forward_loss(batch)
+                #scaler.scale(loss).backward()
                 loss.backward()
+                #scaler.update()

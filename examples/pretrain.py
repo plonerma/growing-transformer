@@ -1,14 +1,15 @@
 import logging
 import random
 from typing import Any, Dict, Union
-
+from pathlib import Path
 import datasets
 import hydra
+from hydra.utils import get_original_cwd
 import torch
-from torch import nn
 from config import Configuration
 from datasets import DatasetDict
 from hydra.core.config_store import ConfigStore
+from torch import nn
 from torch.utils.tensorboard import SummaryWriter
 from transformers import BertForMaskedLM, BertTokenizer, DataCollatorForLanguageModeling
 
@@ -27,6 +28,7 @@ cs.store(name="base_config", node=Configuration)
 
 use_truncated_normal = True
 
+
 def truncated_normal_(tensor, mean=0, std=1):
     """Source: https://discuss.pytorch.org/t/implementing-truncated-normal-initializer/4778/16"""
     size = tensor.shape
@@ -35,6 +37,7 @@ def truncated_normal_(tensor, mean=0, std=1):
     ind = valid.max(-1, keepdim=True)[1]
     tensor.data.copy_(tmp.gather(-1, ind).squeeze(-1))
     tensor.data.mul_(std).add_(mean)
+
 
 class HuggingfaceMLMTransformer(BertForMaskedLM):
     def _init_weights(self, module):
@@ -50,8 +53,6 @@ class HuggingfaceMLMTransformer(BertForMaskedLM):
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
-
-
 
 
 @hydra.main(config_path="config", config_name="config")
@@ -157,7 +158,8 @@ def main(cfg: Configuration):
         raise RuntimeError(f"Model variant {cfg.model.type} not implemented.")
 
     if cfg.load_state is not None:
-        state_dict = torch.load(cfg.load_state, map_location=growing_transformer.device)
+        model_path = Path(get_original_cwd()) / cfg.load_state
+        state_dict = torch.load(model_path, map_location=growing_transformer.device)
         model.load_state_dict(state_dict)
 
     tensorboard_writer = SummaryWriter(".")
@@ -216,6 +218,7 @@ def main(cfg: Configuration):
         tensorboard_writer=tensorboard_writer,
         betas=cfg.training.betas,
         grow_tune_params=cfg.training.grow_tune_params,
+        quit_on_step=cfg.total_steps,
         **hparams_train,
     )
 
