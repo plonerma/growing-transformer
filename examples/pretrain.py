@@ -144,7 +144,7 @@ def main(cfg: Configuration):
     else:
         train_data, test_data = loaded_datasets[0]
 
-    model: torch.nn.Module
+    model: Union[GrowingMLMTransformer, BertForMaskedLM]
 
     if cfg.model.type == "growing":
         model = GrowingMLMTransformer(model_config)
@@ -161,7 +161,7 @@ def main(cfg: Configuration):
     if cfg.load_state is not None:
         model_path = Path(get_original_cwd()) / cfg.load_state
         state_dict = torch.load(model_path, map_location=growing_transformer.device)
-        model.load_state_dict(state_dict)
+        model.load_state_dict(state_dict)  # type:ignore
 
     tensorboard_writer = SummaryWriter(".")
 
@@ -225,7 +225,7 @@ def main(cfg: Configuration):
     tensorboard_writer.add_hparams({**hparams_init, **hparams_train}, results)
 
     if cfg.save_model:
-        torch.save(model.state_dict(), "trained_model.pt")
+        torch.save(model.state_dict(), "trained_model.pt")  # type:ignore
 
     tensorboard_writer.close()
 
