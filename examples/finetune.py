@@ -78,7 +78,7 @@ def main(args):
     )
 
     if args.save_model is not None:
-        torch.save(model.state_dict(), parser.save_model)
+        torch.save(model.state_dict(), args.save_model)
 
 
 if __name__ == "__main__":

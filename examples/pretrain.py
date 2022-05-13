@@ -1,14 +1,15 @@
 import logging
 import random
-from typing import Any, Dict, Union
 from pathlib import Path
+from typing import Any, Dict, Union
+
 import datasets
 import hydra
-from hydra.utils import get_original_cwd
 import torch
 from config import Configuration
 from datasets import DatasetDict
 from hydra.core.config_store import ConfigStore
+from hydra.utils import get_original_cwd
 from torch import nn
 from torch.utils.tensorboard import SummaryWriter
 from transformers import BertForMaskedLM, BertTokenizer, DataCollatorForLanguageModeling
@@ -179,7 +180,6 @@ def main(cfg: Configuration):
         eps=cfg.training.eps,
         max_lr=cfg.training.learning_rate,
         weight_decay=cfg.training.weight_decay,
-        gradient_clipping=cfg.training.gradient_clipping,
     )
 
     def custom_eval(self, global_step=None):

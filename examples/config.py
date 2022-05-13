@@ -35,7 +35,6 @@ class Training:
     grow_data_portion: float
     grow_tune_params: Dict
     mlm_probability: float = 0.15
-    gradient_clipping: Optional[float] = None
 
 
 @dataclass
@@ -48,3 +47,4 @@ class Configuration:
     ignore_cache: bool = False
     preprocessing_num_workers: Optional[int] = 1
     max_seq_length: Optional[int] = None
+    total_steps: Optional[int] = None

@@ -61,6 +61,9 @@ class BaseTrainer:
     def get_lr_scheduler(
         self, *, optimizer, type: str, warmup_steps: int = None, total_steps: int = None, last_step: int = None
     ):
+        if last_step is None:
+            last_step = -1
+
         if type == "constant":
             return LambdaLR(optimizer, lambda step: 1, last_step)
         elif type == "linear":
@@ -71,9 +74,6 @@ class BaseTrainer:
                 if step < warmup_steps:
                     return float(step) / float(max(1, warmup_steps))
                 return max(0.0, float(total_steps - step) / float(max(1, total_steps - warmup_steps)))
-
-            if last_step is None:
-                last_step = -1
 
             return LambdaLR(optimizer, lr_lambda, last_step)
         else:
@@ -90,7 +90,6 @@ class BaseTrainer:
         betas: Tuple[float, float] = (0.9, 0.98),
         eps: float = 1e-06,
         weight_decay: float = 0.01,
-        gradient_clipping: float = None,
         gca_batches: int = 16,  # gradient accumulation batches
         num_epochs: int = 5,
         batch_size: int = 32,
@@ -219,9 +218,6 @@ class BaseTrainer:
 
                     if (batch_index % gca_batches == 0) or (batch_index == len(batch_loader)):
                         global_step += 1
-
-                        # if gradient_clipping is not None:
-                        #    torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=gradient_clipping)
 
                         scaler.step(optimizer)
                         scaler.update()

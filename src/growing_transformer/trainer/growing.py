@@ -355,10 +355,6 @@ class GrowingTrainer(BaseTrainer):
         except KeyboardInterrupt:
             log_line(log)
 
-            if propagate_interrupt:
-                log.warning("Exiting from training early.")
-                raise KeyboardInterrupt
-
             if test_data is not None:
                 log.info("Evaluating after early termination:")
                 eval_results = self.evaluate(test_data)
@@ -395,11 +391,11 @@ class GrowingTrainer(BaseTrainer):
         with self.some_grad_only(*self.model.step_size_params()):
             self.model.zero_grad(set_to_none=True)
 
-            #scaler = torch.cuda.amp.GradScaler()
+            # scaler = torch.cuda.amp.GradScaler()
 
             for batch in self.get_batch_loader(train_data, batch_size=batch_size):
-                #with torch.cuda.amp.autocast():
+                # with torch.cuda.amp.autocast():
                 loss = self.forward_loss(batch)
-                #scaler.scale(loss).backward()
+                # scaler.scale(loss).backward()
                 loss.backward()
-                #scaler.update()
+                # scaler.update()
