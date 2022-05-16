@@ -203,7 +203,7 @@ class BaseTrainer:
                     if epoch == start_epoch:
                         tensorboard_writer.add_scalar("epochs_completed", epoch, global_step)
 
-                accumulated_batch_loss = 0
+                accumulated_batch_loss = 0.0
 
                 optimizer.zero_grad()
                 for batch_index, batch in enumerate(batch_loader, start=1):
@@ -227,11 +227,15 @@ class BaseTrainer:
                             scheduler.step()
 
                         if use_tensorboard:
+                            if not (batch_index % gca_batches == 0):
+                                # make correction to average loss
+                                accumulated_batch_loss *= gca_batches / (batch_index % gca_batches)
+
                             tensorboard_writer.add_scalar("loss/train_loss_batch", accumulated_batch_loss, global_step)
                             for i, lr in enumerate(scheduler.get_last_lr()):
                                 tensorboard_writer.add_scalar(f"learning_rate/{i}", lr, global_step)
 
-                        accumulated_batch_loss = 0
+                        accumulated_batch_loss = 0.0
 
                         if quit_on_step is not None and global_step == quit_on_step:
                             raise KeyboardInterrupt
