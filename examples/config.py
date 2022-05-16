@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Dict, List, Optional
 
 
@@ -15,8 +15,8 @@ class Dataset:
 @dataclass
 class Model:
     type: str
-    config: Dict
     tokenizer: str
+    config: Dict = field(default_factory=dict)
 
 
 @dataclass

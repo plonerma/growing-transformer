@@ -52,6 +52,8 @@ class GrowingTrainer(BaseTrainer):
         start_size = self.model_size()
         log.info(f"Model size currently: {start_size}")
 
+        time_start = time.time()
+
         if batch_size is None:
             batch_size = self.batch_size
 
@@ -177,12 +179,18 @@ class GrowingTrainer(BaseTrainer):
         else:
             grow_select_data = grow_data
 
+        time_tuned = time.time()
+
         log.info(f"Selecting neurons to keep using {self._selection_method }")
 
         # === Select neurons ===
         if self._selection_method == "firefly":
 
             self.calculate_step_gradient(grow_select_data, batch_size=batch_size)
+            time_grad = time.time()
+
+            if tensorboard_writer:
+                tensorboard_writer.add_scalar("time/growth_grad_calc", time_grad - time_tuned, index)
 
             for m, size, conf in grown_modules:
                 num_kept_parts = conf["num_keep"]
@@ -210,10 +218,14 @@ class GrowingTrainer(BaseTrainer):
                 if tensorboard_writer is not None and selected.numel() and index is not None:
                     tensorboard_writer.add_histogram(f"selected neurons/{m.__class__.__name__}", selected, index)
 
+        time_end = time.time()
         grown_size = self.model_size()
         log.info(f"Model size (after selection): {grown_size}")
 
         if tensorboard_writer:
+            tensorboard_writer.add_scalar("time/growth", time_end - time_start, index)
+            tensorboard_writer.add_scalar("time/grow_tuning", time_tuned - time_start, index)
+            tensorboard_writer.add_scalar("time/grow_selection", time_end - time_tuned, index)
             tensorboard_writer.add_scalar("model size/start size", start_size, index)
             tensorboard_writer.add_scalar("model size/overgrown size", overgrown_size, index)
             tensorboard_writer.add_scalar("model size/grown size", grown_size, index)
@@ -267,7 +279,6 @@ class GrowingTrainer(BaseTrainer):
 
                     log.info(f"{len(_grow_data)} samples used for tuning growth.")
 
-                    grow_start = time.time()
                     self.grow_model(
                         step_params,
                         grow_data=_grow_data,
@@ -276,11 +287,8 @@ class GrowingTrainer(BaseTrainer):
                         num_workers=num_workers,
                         **grow_tune_params,
                     )
-                    grow_end = time.time()
 
                     if tensorboard_writer is not None:
-                        tensorboard_writer.add_scalar("time/growth", grow_end - grow_start, global_step)
-
                         tensorboard_writer.add_scalar("model size/current", self.model_size(), global_step)
 
                 elif step_type == step_type.train:
