@@ -41,7 +41,7 @@ class GrowingTrainer(BaseTrainer):
         shuffle=True,
         num_workers: Optional[int] = None,
         track_tuned_steps=True,
-        grow_select_portion=0.2,
+        grow_select_portion=0.1,
         no_decay: List[str] = ["bias", "layer_norm.weight", "LayerNorm.weight"],
         **optimizer_params,
     ):
@@ -92,7 +92,7 @@ class GrowingTrainer(BaseTrainer):
         if self._tune_direction or self._tune_step_size:
             assert grow_data is not None
 
-            grow_tune_data, grow_select_data = split_dataset(grow_data, grow_select_portion)
+            grow_select_data, grow_tune_data = split_dataset(grow_data, grow_select_portion)
 
             is_tuned = {"direction": self._tune_direction, "step_size": self._tune_step_size}
             tuned_str = " and ".join((k for k, v in is_tuned.items() if v))
@@ -152,11 +152,12 @@ class GrowingTrainer(BaseTrainer):
 
             scaler = torch.cuda.amp.GradScaler()
 
-            log.info(f"Tuning for {num_epochs} epochs.")
+            batch_loader = self.get_batch_loader(grow_tune_data, batch_size=batch_size)
+
+            log.info(f"Tuning for {num_epochs} epochs with {len(batch_loader)} batches / {len(batch_loader) // gca_batches} steps each.")
 
             with self.some_grad_only(*relevant_params):
                 for epoch in range(num_epochs):
-                    batch_loader = self.get_batch_loader(grow_tune_data, batch_size=batch_size)
 
                     optimizer.zero_grad()
 
@@ -298,7 +299,7 @@ class GrowingTrainer(BaseTrainer):
                         _grow_data = grow_data
 
                     if grow_data_portion is not None and grow_data_portion < 1.0:
-                        log.info("Downsampling grow data")
+                        log.info(f"Downsampling grow data ({grow_data_portion})")
                         _grow_data = downsample_dataset(_grow_data, grow_data_portion)
 
                     log.info(f"{len(_grow_data)} samples used for tuning growth.")
