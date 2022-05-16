@@ -1,4 +1,4 @@
-from typing import Callable, List, Optional
+from typing import Callable, Optional
 
 import torch
 from torch.nn import Parameter
@@ -8,7 +8,7 @@ from transformers.activations import ACT2FN
 import growing_transformer
 
 from ..configuration import GrowingConfig
-from .base import GrowingModule
+from .base import GrowingModule, NamedDirectionParams
 
 
 class GrowingMLP(GrowingModule):
@@ -51,14 +51,14 @@ class GrowingMLP(GrowingModule):
         self._in_weight_novel: Optional[torch.nn.Parameter] = None
         self._in_bias_novel: Optional[torch.nn.Parameter] = None
 
-    def _direction_params(self) -> List[Optional[torch.nn.Parameter]]:
-        return [
-            self._in_weight_split,
-            self._in_bias_split,
-            self._out_weight_novel,
-            self._in_weight_novel,
-            self._in_bias_novel,
-        ]
+    def _direction_params(self, named=False) -> NamedDirectionParams:
+        return {
+            "split_direction_weight": self._in_weight_split,
+            "split_direction_bias": self._in_bias_split,
+            "novel_direction_out_weight": self._out_weight_novel,
+            "novel_direction_in_weight": self._in_weight_novel,
+            "novel_direction_in_bias": self._in_bias_novel,
+        }
 
     @property
     def in_features(self) -> int:

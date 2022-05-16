@@ -1,9 +1,11 @@
 from abc import abstractmethod
-from typing import Iterable, Mapping, Optional
+from typing import Dict, Iterable, Mapping, Optional, Tuple, Union
 
 import torch
 
 from ..configuration import GrowingConfig
+
+NamedDirectionParams = Dict[str, Optional[torch.nn.Parameter]]
 
 
 class Growing(torch.nn.Module):
@@ -30,14 +32,22 @@ class Growing(torch.nn.Module):
                 else:
                     yield m
 
-    def direction_params(self) -> Iterable[torch.nn.Parameter]:
-        for m in self.growing_modules():
-            if not isinstance(m, GrowingModule):
-                continue
+    def _direction_params(self) -> NamedDirectionParams:
+        return {}
 
-            for p in m._direction_params():
+    def direction_params(
+        self, named=False, recursive=False
+    ) -> Union[Iterable[torch.nn.Parameter], Iterable[Tuple[str, torch.nn.Parameter]]]:
+        if recursive:
+            for m in self.growing_modules():
+                yield from m.direction_params(named=named, recursive=False)
+        else:
+            for p, n in self._direction_params().items():
                 if p is not None:
-                    yield p
+                    if named:
+                        yield p, n
+                    else:
+                        yield p
 
     def step_size_params(self) -> Iterable[torch.nn.Parameter]:
         for m in self.growing_modules():
@@ -100,7 +110,7 @@ class GrowingModule(Growing):
         pass
 
     @abstractmethod
-    def _direction_params(self) -> Iterable[Optional[torch.nn.Parameter]]:
+    def _direction_params(self) -> NamedDirectionParams:
         pass
 
     def select(self, k: int) -> torch.Tensor:

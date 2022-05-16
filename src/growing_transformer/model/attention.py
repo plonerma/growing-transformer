@@ -1,4 +1,4 @@
-from typing import Iterable, List, Optional, Tuple, Union
+from typing import Dict, Optional, Tuple, Union
 
 import torch
 from torch import Tensor
@@ -8,7 +8,7 @@ from torch.nn.init import uniform_
 import growing_transformer
 
 from ..configuration import GrowingConfig, first_not_none
-from .base import GrowingModule
+from .base import GrowingModule, NamedDirectionParams
 
 
 class AttentionOutput(GrowingModule):
@@ -34,12 +34,12 @@ class AttentionOutput(GrowingModule):
         self._value_bias: Optional[Parameter] = None
         self._output_weight: Optional[Parameter] = None
 
-    def _direction_params(self) -> Iterable[Optional[Parameter]]:
-        return [
-            self._value_weight,
-            self._value_bias,
-            self._output_weight,
-        ]
+    def _direction_params(self) -> NamedDirectionParams:
+        return {
+            "value_direction_weight": self._value_weight,
+            "value_direction_bias": self._value_bias,
+            "output_direction_weight": self._output_weight,
+        }
 
     @property
     def in_features(self) -> int:
@@ -182,11 +182,11 @@ class ScaledDotProductAttention(GrowingModule):
         self._weight: Optional[Parameter] = None
         self._bias: Optional[Parameter] = None
 
-    def _direction_params(self) -> Iterable[Optional[Parameter]]:
-        return [
-            self._weight,
-            self._bias,
-        ]
+    def _direction_params(self) -> NamedDirectionParams:
+        return {
+            "direction_weight": self._weight,
+            "direction_bias": self._bias,
+        }
 
     @property
     def d_model(self) -> int:
@@ -384,14 +384,16 @@ class GrowingAttention(GrowingModule):
         self._new_dot_product: Optional[ScaledDotProductAttention] = None
         self._new_output: Optional[AttentionOutput] = None
 
-    def _direction_params(self) -> Iterable[Optional[Parameter]]:
-        params: List[Parameter] = []
+    def _direction_params(self) -> NamedDirectionParams:
+        params: Dict[str, Optional[Parameter]] = {}
 
         if self._new_dot_product is not None:
-            params += list(self._new_dot_product.parameters())
+            for n, p in self._new_dot_product.named_parameters():
+                params[f"dot_product_direction_{n}"] = p
 
         if self._new_output is not None:
-            params += list(self._new_output.parameters())
+            for n, p in self._new_output.named_parameters():
+                params[f"output_direction_{n}"] = p
 
         return params
 

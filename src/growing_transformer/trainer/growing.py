@@ -3,7 +3,7 @@ import os
 import re
 import time
 from contextlib import contextmanager
-from typing import Any, Dict, Mapping, Optional
+from typing import Any, Dict, List, Mapping, Optional
 
 import torch
 
@@ -42,6 +42,7 @@ class GrowingTrainer(BaseTrainer):
         num_workers: Optional[int] = None,
         track_tuned_steps=True,
         grow_select_portion=0.2,
+        no_decay: List[str] = ["bias", "layer_norm.weight", "LayerNorm.weight"],
         **optimizer_params,
     ):
         log.info("Growing model")
@@ -97,24 +98,47 @@ class GrowingTrainer(BaseTrainer):
             tuned_str = " and ".join((k for k, v in is_tuned.items() if v))
 
             log.info(f"Tuning {tuned_str}")
-            log.info(f"- gca_batches: {gca_batches}")
-            log.info(f"- batch_size: {batch_size}")
-            log.info(f"- num_epochs: {num_epochs}")
+            log.info(f"  gca_batches: {gca_batches}")
+            log.info(f"  batch_size: {batch_size}")
+            log.info(f"  num_epochs: {num_epochs}")
 
-            param_groups = list()
-            relevant_params = list()
+            direction_decay_params: List[torch.nn.Parameter] = list()
+            direction_no_decay_params: List[torch.nn.Parameter] = list()
+            step_size_params: List[torch.nn.Parameter] = list()
 
             for m, size, conf in grown_modules:
                 kw = conf.get("tune_params", dict())
 
                 if self._tune_direction:
-                    params = [p for p in m._direction_params() if p is not None]
-                    param_groups.append({"params": params, **kw.get("direction", dict())})
-                    relevant_params += params
+                    for name, p in m.direction_params(named=True, recursive=False):
+                        if p is None:
+                            continue
+
+                        if any(name.endswith(suffix) for suffix in no_decay):
+                            direction_decay_params.append(p)
+                        else:
+                            direction_no_decay_params.append(p)
+
                 if self._tune_step_size:
-                    params = [m.step_size]
-                    param_groups.append({"params": params, **kw.get("step_size", dict())})
-                    relevant_params += params
+                    step_size_params.append(m.step_size)
+
+            param_groups: List[Dict[str, Any]] = list()
+
+            # direction (decay) group
+            if len(direction_decay_params) > 0:
+                param_groups.append({"params": direction_decay_params, **kw.get("direction", dict())})
+
+            # direction (no decay) group
+            if len(direction_no_decay_params) > 0:
+                param_groups.append(
+                    {"params": direction_no_decay_params, **kw.get("direction", dict()), "weight_decay": 0.0}
+                )
+
+            # step size group
+            if len(step_size_params) > 0:
+                param_groups.append({"params": step_size_params, **kw.get("step_size", dict())})
+
+            relevant_params = direction_decay_params + direction_no_decay_params + step_size_params
 
             kw = dict(optimizer_params)
             lr = kw.pop("learning_rate")

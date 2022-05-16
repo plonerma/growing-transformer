@@ -8,7 +8,7 @@ from torch.nn.init import uniform_
 import growing_transformer
 
 from ..configuration import GrowingConfig
-from .base import GrowingModule
+from .base import GrowingModule, NamedDirectionParams
 from .layer import GrowingLayer
 
 
@@ -34,8 +34,8 @@ class GrowingEncoder(GrowingModule):
                 x = self._new_layers[i](x, influence_factor=self.step_size[i], attention_mask=attention_mask)
         return x
 
-    def _direction_params(self):
-        return list(self._new_layers.parameters())
+    def _direction_params(self) -> NamedDirectionParams:
+        return {f"direction_{n}": p for n, p in self._new_layers.named_parameters()}
 
     def grow(self, num_novel: int = 0, split: bool = False) -> torch.Size:
         # one layer in every possible location: between all existing layers + at the start and end
