@@ -21,23 +21,13 @@ from growing_transformer.data import (
     prepare_mlm_dataset,
     split_dataset,
 )
-from growing_transformer.model import GrowingMLMTransformer
+from growing_transformer.model import GrowingMLMTransformer, truncated_normal_
 
 cs = ConfigStore.instance()
 cs.store(name="base_config", node=Configuration)
 
 
 use_truncated_normal = True
-
-
-def truncated_normal_(tensor, mean=0, std=1):
-    """Source: https://discuss.pytorch.org/t/implementing-truncated-normal-initializer/4778/16"""
-    size = tensor.shape
-    tmp = tensor.new_empty(size + (4,)).normal_()
-    valid = (tmp < 2) & (tmp > -2)
-    ind = valid.max(-1, keepdim=True)[1]
-    tensor.data.copy_(tmp.gather(-1, ind).squeeze(-1))
-    tensor.data.mul_(std).add_(mean)
 
 
 class HuggingfaceMLMTransformer(BertForMaskedLM):

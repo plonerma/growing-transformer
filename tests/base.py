@@ -29,16 +29,20 @@ class GrowingTest:
     model_class: Optional[Type[Growing]] = None
 
     growth_params = [
-        dict(kw=dict(split=False, num_novel=4), config=dict(eps_novel=1, step_size=1e-5)),
-        dict(kw=dict(split=False, num_novel=4), config=dict(eps_novel=1e-5, step_size=1)),
+        dict(kw=dict(split=False, num_novel=4), config=dict(initializer_range=1, step_size=1e-6)),
+        dict(kw=dict(split=False, num_novel=4), config=dict(initializer_range=1e-5, step_size=1)),
     ]
 
     degrowth_params = [
-        dict(kw=dict(split=True, num_novel=4), config=dict(eps_split=0.1, eps_novel=0.2, step_size=0.3)),
-        dict(kw=dict(split=False, num_novel=4), config=dict(eps_split=0.1, eps_novel=0.2, step_size=0.3)),
-        dict(kw=dict(split=True, num_novel=0), config=dict(eps_split=0.1, eps_novel=0.2, step_size=0.3)),
-        dict(kw=dict(split=False, num_novel=0), config=dict(eps_split=0.1, eps_novel=0.2, step_size=0.3)),
-        dict(kw=dict(split=True, num_novel=4), config=dict(eps_split=0.1, eps_novel=0.2, step_size=1.0)),
+        dict(kw=dict(split=True, num_novel=4), config=dict(init_split_range=0.1, initializer_range=0.2, step_size=0.3)),
+        dict(
+            kw=dict(split=False, num_novel=4), config=dict(init_split_range=0.1, initializer_range=0.2, step_size=0.3)
+        ),
+        dict(kw=dict(split=True, num_novel=0), config=dict(init_split_range=0.1, initializer_range=0.2, step_size=0.3)),
+        dict(
+            kw=dict(split=False, num_novel=0), config=dict(init_split_range=0.1, initializer_range=0.2, step_size=0.3)
+        ),
+        dict(kw=dict(split=True, num_novel=4), config=dict(init_split_range=0.1, initializer_range=0.2, step_size=1.0)),
     ]
 
     def random_batch(self, size=None):
@@ -227,10 +231,10 @@ class GrowingTest:
 
 class SplittingTest(GrowingTest):
     growth_params = [
-        dict(kw=dict(split=True, num_novel=4), config=dict(eps_split=1, eps_novel=1, step_size=1e-5)),
-        dict(kw=dict(split=False, num_novel=4), config=dict(eps_split=1, eps_novel=1e-4, step_size=1)),
-        dict(kw=dict(split=True, num_novel=0), config=dict(eps_split=1e-4, eps_novel=1, step_size=1)),
-        dict(kw=dict(split=True, num_novel=4), config=dict(eps_split=1e-4, eps_novel=1e-4, step_size=1)),
+        dict(kw=dict(split=True, num_novel=4), config=dict(init_split_range=1, initializer_range=1, step_size=1e-5)),
+        dict(kw=dict(split=False, num_novel=4), config=dict(init_split_range=1, initializer_range=1e-4, step_size=1)),
+        dict(kw=dict(split=True, num_novel=0), config=dict(init_split_range=1e-4, initializer_range=1, step_size=1)),
+        dict(kw=dict(split=True, num_novel=4), config=dict(init_split_range=1e-4, initializer_range=1e-4, step_size=1)),
     ]
 
     @pytest.mark.parametrize("params", growth_params)

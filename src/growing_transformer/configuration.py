@@ -33,12 +33,7 @@ class GrowingConfig(BertConfig):
         mlp_num_novel: Optional[int] = None,
         mha_num_novel: Optional[int] = None,
         sdp_num_novel: Optional[int] = None,
-        eps_split: float = 1e-1,
-        eps_novel: float = 1e-1,
-        eps_split_weight: Optional[float] = None,
-        eps_split_bias: Optional[float] = None,
-        eps_novel_weight: Optional[float] = None,
-        eps_novel_bias: Optional[float] = None,
+        init_split_range: Optional[float] = None,
         loss_on_all_tokens=True,
         **kwargs,
     ):
@@ -69,7 +64,4 @@ class GrowingConfig(BertConfig):
         self.sdp_num_novel = first_not_none(sdp_num_novel, num_novel)
 
         # values for initializing split directions and novel neurons
-        self.eps_split_weight = first_not_none(eps_split_weight, eps_split)
-        self.eps_split_bias = first_not_none(eps_split_bias, eps_split)
-        self.eps_novel_weight = first_not_none(eps_novel_weight, eps_novel)
-        self.eps_novel_bias = first_not_none(eps_novel_bias, eps_novel)
+        self.init_split_range = first_not_none(init_split_range, self.initializer_range)

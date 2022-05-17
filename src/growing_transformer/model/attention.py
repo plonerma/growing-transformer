@@ -3,12 +3,11 @@ from typing import Dict, Optional, Tuple, Union
 import torch
 from torch import Tensor
 from torch.nn import LayerNorm, Linear, Parameter
-from torch.nn.init import uniform_
 
 import growing_transformer
 
 from ..configuration import GrowingConfig, first_not_none
-from .base import GrowingModule, NamedDirectionParams
+from .base import GrowingModule, NamedDirectionParams, truncated_normal_
 
 
 class AttentionOutput(GrowingModule):
@@ -79,12 +78,10 @@ class AttentionOutput(GrowingModule):
         return out
 
     def grow(self, num_novel: int = 0, split: bool = False) -> torch.Size:
-        step_size = self.config.step_size
-        eps_novel_weight = self.config.eps_novel_weight
-        eps_novel_bias = self.config.eps_novel_bias
-
         # add parameter to measure influence/gradient of adding new neurons
-        self.step_size = Parameter(torch.ones(self.heads, num_novel, device=growing_transformer.device) * step_size)
+        self.step_size = Parameter(
+            torch.ones(self.heads, num_novel, device=growing_transformer.device) * self.config.step_size
+        )
 
         # create update direction for weight and bias
         self._value_weight = Parameter(
@@ -95,9 +92,9 @@ class AttentionOutput(GrowingModule):
             torch.empty(self.d_model, self.heads * num_novel, device=growing_transformer.device)
         )
 
-        uniform_(self._value_weight, -eps_novel_weight, eps_novel_weight)
-        uniform_(self._output_weight, -eps_novel_weight, eps_novel_weight)
-        uniform_(self._value_bias, -eps_novel_bias, eps_novel_bias)
+        truncated_normal_(self._value_weight, mean=0.0, std=self.config.initializer_range)
+        truncated_normal_(self._output_weight, mean=0.0, std=self.config.initializer_range)
+        self._value_bias.data.zero_()
 
         return self.step_size.size()
 
@@ -234,13 +231,10 @@ class ScaledDotProductAttention(GrowingModule):
         return torch.softmax(product, dim=-1)
 
     def grow(self, num_novel: int = 0, split: bool = False) -> torch.Size:
-        step_size = self.config.step_size
-        eps_novel_weight = self.config.eps_novel_weight
-        eps_novel_bias = self.config.eps_novel_bias
-
         # add parameter to measure influence/gradient of adding new neurons
         self.step_size = Parameter(
-            torch.ones(self.heads, num_novel, device=growing_transformer.device) * step_size, requires_grad=False
+            torch.ones(self.heads, num_novel, device=growing_transformer.device) * self.config.step_size,
+            requires_grad=False,
         )
 
         # create update direction for weight and bias
@@ -252,9 +246,8 @@ class ScaledDotProductAttention(GrowingModule):
             torch.empty(2, self.heads * num_novel, device=growing_transformer.device), requires_grad=False
         )
 
-        torch.nn.init.uniform_(self._weight, -eps_novel_weight, eps_novel_weight)
-
-        torch.nn.init.uniform_(self._bias, -eps_novel_bias, eps_novel_bias)
+        truncated_normal_(self._weight, mean=0.0, std=self.config.initializer_range)
+        self._bias.data.zero_()
 
         return self.step_size.size()
 
@@ -407,8 +400,7 @@ class GrowingAttention(GrowingModule):
             self._new_dot_product = ScaledDotProductAttention(config=self.config, heads=num_novel)
             self._new_output = AttentionOutput(config=self.config, heads=num_novel, bias=False)
 
-            eps_weight = self.config.eps_novel_weight
-            uniform_(self._new_output.output_linear.weight, -eps_weight, eps_weight)
+            truncated_normal_(self._new_output.output_linear.weight, mean=0.0, std=self.config.initializer_range)
 
             return self.step_size.size()
         else:

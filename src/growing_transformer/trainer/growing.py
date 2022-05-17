@@ -40,7 +40,7 @@ class GrowingTrainer(BaseTrainer):
         num_epochs: int = 1,
         shuffle=True,
         num_workers: Optional[int] = None,
-        track_tuned_steps=True,
+        track_tuned_params=True,
         grow_select_portion=0.1,
         no_decay: List[str] = ["bias", "layer_norm.weight", "LayerNorm.weight"],
         **optimizer_params,
@@ -154,7 +154,9 @@ class GrowingTrainer(BaseTrainer):
 
             batch_loader = self.get_batch_loader(grow_tune_data, batch_size=batch_size)
 
-            log.info(f"Tuning for {num_epochs} epochs with {len(batch_loader)} batches / {len(batch_loader) // gca_batches} steps each.")
+            log.info(
+                f"Tuning for {num_epochs} epochs with {len(batch_loader)} batches / {len(batch_loader) // gca_batches} steps each."
+            )
 
             with self.some_grad_only(*relevant_params):
                 for epoch in range(num_epochs):
@@ -181,25 +183,25 @@ class GrowingTrainer(BaseTrainer):
                                     f"tuning directions and steps/step {index}", step_loss, tune_step
                                 )
 
-                                if track_tuned_steps:
+                                if track_tuned_params:
                                     for n, m in self.model.growing_modules(named=True):
-                                        if isinstance(m, GrowingModule) and m.step_size is not None:
-                                            tensorboard_writer.add_histogram(
-                                                f"step_sizes/step {index}/{n}", m.step_size, tune_step
-                                            )
-
-                                        if isinstance(m, GrowingModule) and m.step_size is not None:
-                                            tensorboard_writer.add_histogram(
-                                                f"step_sizes/grad {index}/{n}", m.step_size.grad, tune_step
-                                            )
+                                        if isinstance(m, GrowingModule):
+                                            if m.step_size is not None:
+                                                tensorboard_writer.add_histogram(
+                                                    f"step_sizes/step {index}/{n}", m.step_size, tune_step
+                                                )
+                                            for pn, p in m.direction_params(named=True, recursive=False):
+                                                tensorboard_writer.add_histogram(
+                                                    f"step_sizes/step {index}/{n}.{pn}", p, tune_step
+                                                )
 
                             scaler.step(optimizer)
                             scaler.update()
+                            optimizer.zero_grad()
 
                             if scheduler is not None:
                                 scheduler.step()
 
-                            optimizer.zero_grad()
                             step_loss = 0.0
         else:
             grow_select_data = grow_data

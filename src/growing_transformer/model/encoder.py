@@ -3,7 +3,6 @@ from typing import Optional
 import torch
 from torch import Tensor
 from torch.nn import ModuleList, Parameter
-from torch.nn.init import uniform_
 
 import growing_transformer
 
@@ -41,22 +40,16 @@ class GrowingEncoder(GrowingModule):
         # one layer in every possible location: between all existing layers + at the start and end
         new_layers = len(self.layer)
 
-        step_size = self.config.layer_step_size
-        self.step_size = Parameter(torch.ones(new_layers, device=growing_transformer.device) * step_size)
+        self.step_size = Parameter(
+            torch.ones(new_layers, device=growing_transformer.device) * self.config.layer_step_size
+        )
 
         self._new_layers = torch.nn.ModuleList()
 
         for prev_layer in self.layer:
             new_layer = GrowingLayer(config=self.config)
 
-            eps_weight = self.config.eps_novel_weight
-            eps_bias = self.config.eps_novel_bias
-
-            uniform_(new_layer.mlp.linear_out.weight, -eps_weight, eps_weight)
-            uniform_(new_layer.mlp.linear_out.bias, -eps_bias, eps_bias)
-
-            uniform_(new_layer.attention.output.output_linear.weight, -eps_weight, eps_weight)
-            uniform_(new_layer.attention.output.output_linear.bias, -eps_bias, eps_bias)
+            new_layer.apply(new_layer._init_weights)
 
             new_layer.layer_norm.weight.data = prev_layer.layer_norm.weight
             new_layer.layer_norm.bias.data = prev_layer.layer_norm.bias

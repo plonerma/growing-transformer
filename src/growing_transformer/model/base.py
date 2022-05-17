@@ -8,6 +8,16 @@ from ..configuration import GrowingConfig
 NamedDirectionParams = Dict[str, Optional[torch.nn.Parameter]]
 
 
+def truncated_normal_(tensor, mean=0, std=1):
+    """Source: https://discuss.pytorch.org/t/implementing-truncated-normal-initializer/4778/16"""
+    size = tensor.shape
+    tmp = tensor.new_empty(size + (4,)).normal_()
+    valid = (tmp < 2) & (tmp > -2)
+    ind = valid.max(-1, keepdim=True)[1]
+    tensor.data.copy_(tmp.gather(-1, ind).squeeze(-1))
+    tensor.data.mul_(std).add_(mean)
+
+
 class Growing(torch.nn.Module):
     _bert_state_dict_map: Optional[Mapping[str, str]] = None
 
@@ -86,6 +96,20 @@ class Growing(torch.nn.Module):
 
     def update_config(self, num_added: int):
         pass
+
+    def _init_weights(self, module):
+        """Initialize the weights"""
+        if isinstance(module, torch.nn.Linear):
+            truncated_normal_(module.weight.data, mean=0.0, std=self.config.initializer_range)
+            if module.bias is not None:
+                module.bias.data.zero_()
+        elif isinstance(module, torch.nn.Embedding):
+            truncated_normal_(module.weight.data, mean=0.0, std=self.config.initializer_range)
+            if module.padding_idx is not None:
+                module.weight.data[module.padding_idx].zero_()
+        elif isinstance(module, torch.nn.LayerNorm):
+            module.bias.data.zero_()
+            module.weight.data.fill_(1.0)
 
 
 class GrowingModule(Growing):

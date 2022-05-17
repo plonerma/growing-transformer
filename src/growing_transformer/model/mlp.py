@@ -2,13 +2,12 @@ from typing import Callable, Optional
 
 import torch
 from torch.nn import Parameter
-from torch.nn.init import uniform_
 from transformers.activations import ACT2FN
 
 import growing_transformer
 
 from ..configuration import GrowingConfig
-from .base import GrowingModule, NamedDirectionParams
+from .base import GrowingModule, NamedDirectionParams, truncated_normal_
 
 
 class GrowingMLP(GrowingModule):
@@ -114,15 +113,10 @@ class GrowingMLP(GrowingModule):
         return y
 
     def grow(self, num_novel: int = 0, split: bool = True) -> torch.Size:
-        step_size = self.config.step_size
-        eps_split_weight = self.config.eps_split_weight
-        eps_split_bias = self.config.eps_split_bias
-        eps_novel_weight = self.config.eps_novel_weight
-        eps_novel_bias = self.config.eps_novel_bias
-
         # add parameter to measure influence/gradient of adding new neurons
         self.step_size = Parameter(
-            torch.ones(self.hidden_features * split + num_novel, device=growing_transformer.device) * step_size
+            torch.ones(self.hidden_features * split + num_novel, device=growing_transformer.device)
+            * self.config.step_size
         )
 
         # create update direction for weight and bias
@@ -131,8 +125,9 @@ class GrowingMLP(GrowingModule):
                 torch.empty(self.hidden_features, self.in_features, device=growing_transformer.device),
             )
             self._in_bias_split = Parameter(torch.empty(self.hidden_features, device=growing_transformer.device))
-            uniform_(self._in_weight_split, -eps_split_weight, eps_split_weight)
-            uniform_(self._in_bias_split, -eps_split_bias, eps_split_bias)
+
+            truncated_normal_(self._in_weight_split, mean=0.0, std=self.config.init_split_range)
+            truncated_normal_(self._in_bias_split, mean=0.0, std=self.config.init_split_range)
 
         if num_novel > 0:
             self._in_weight_novel = Parameter(
@@ -142,9 +137,10 @@ class GrowingMLP(GrowingModule):
                 torch.empty(self.out_features, num_novel, device=growing_transformer.device)
             )
             self._in_bias_novel = Parameter(torch.empty(num_novel, device=growing_transformer.device))
-            uniform_(self._in_weight_novel, -eps_novel_weight, eps_novel_weight)
-            uniform_(self._out_weight_novel, -eps_novel_weight, eps_novel_weight)
-            uniform_(self._in_bias_novel, -eps_novel_bias, eps_novel_bias)
+
+            truncated_normal_(self._in_weight_novel, mean=0.0, std=self.config.initializer_range)
+            truncated_normal_(self._out_weight_novel, mean=0.0, std=self.config.initializer_range)
+            self._in_bias_novel.data.zero_()
 
         return self.step_size.size()
 
