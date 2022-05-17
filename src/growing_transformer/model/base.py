@@ -52,10 +52,10 @@ class Growing(torch.nn.Module):
             for m in self.growing_modules():
                 yield from m.direction_params(named=named, recursive=False)
         else:
-            for p, n in self._direction_params().items():
+            for n, p in self._direction_params().items():
                 if p is not None:
                     if named:
-                        yield p, n
+                        yield n, p
                     else:
                         yield p
 
