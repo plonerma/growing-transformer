@@ -9,8 +9,11 @@ defaults:
   - _self_
 
 training:
-  batch_size: 16
-  gca_batches: 16
-  learning_rate: 5e-5
+  batch_size: 128
+  gca_batches: 32
+  learning_rate: 5e-4
+
   weight_decay: 0.01
-  betas: [0.9, 0.999]
+  betas: [0.9, 0.98]
+
+max_seq_length: 128

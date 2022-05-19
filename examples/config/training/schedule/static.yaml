@@ -1,8 +1,18 @@
-num_epochs: 50
-
 steps:
   - lr_scheduler:
       type: linear
-      warmup_steps: 10000
+      warmup_portion: 0.06
   - train:
-      num_epochs: ${training.schedule.num_epochs}
+      num_epochs: 2
+  - checkpoint
+  - train:
+      num_epochs: 2
+  - checkpoint
+  - train:
+      num_epochs: 2
+  - checkpoint
+  - train:
+      num_epochs: 2
+  - checkpoint
+  - train:
+      num_epochs: 2

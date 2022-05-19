@@ -1,4 +1,2 @@
 type: huggingface
-config:
-  loss_on_all_tokens: True
 tokenizer: "bert-base-uncased"

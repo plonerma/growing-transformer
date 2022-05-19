@@ -6,10 +6,10 @@ defaults:
       - bookcorpus
   - override /model: grow_start
   - override /training: growing
-  - override /training/schedule: growing_single_step
   - _self_
 
-load_state: models/grow_start.pt
+
+
 
 training:
   batch_size: 128
@@ -18,6 +18,10 @@ training:
 
   weight_decay: 0.01
   betas: [0.9, 0.98]
+
+  selection_method: "random"
+  tune_direction: False
+  tune_step_size: False
 
   grow_tune_params:
     weight_decay: 0.01
