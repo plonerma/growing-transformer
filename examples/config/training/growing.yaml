@@ -2,7 +2,6 @@ defaults:
   - schedule: growing
   - _self_
 
-device: "cuda:0"
 learning_rate: 1e-4
 batch_size: 128
 gca_batches: 2

@@ -2,7 +2,7 @@ defaults:
   - schedule: static
   - _self_
 
-device: "cuda:0"
+
 learning_rate: 5e-5
 batch_size: 64
 gca_batches: 4

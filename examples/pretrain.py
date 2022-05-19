@@ -51,7 +51,7 @@ def main(cfg: Configuration):
     log = logging.getLogger("growing_transformer")
     # add_file_handler(log, Path("training.log"))
 
-    growing_transformer.device = torch.device(cfg.training.device)
+    growing_transformer.device = torch.device(cfg.device)
 
     # mark as used
     _ = torch.tensor(0).to(growing_transformer.device)

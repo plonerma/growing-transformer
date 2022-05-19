@@ -25,7 +25,6 @@ class Training:
     learning_rate: float
     batch_size: int
     gca_batches: int
-    device: str
     betas: List[float]
     eps: float
     weight_decay: float
@@ -39,6 +38,7 @@ class Training:
 
 @dataclass
 class Configuration:
+    device: str
     datasets: Dict[str, Dataset]
     model: Model
     training: Training
