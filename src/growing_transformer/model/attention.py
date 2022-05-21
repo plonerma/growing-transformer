@@ -404,7 +404,7 @@ class GrowingAttention(GrowingModule):
 
             return self.step_size.size()
         else:
-            return torch.Size()
+            return torch.Size([0])
 
     def degrow(self, selected: torch.Tensor) -> None:
         # join old modules and selected heads of new modules together

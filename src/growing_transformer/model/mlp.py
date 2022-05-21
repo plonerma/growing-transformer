@@ -202,7 +202,9 @@ class GrowingMLP(GrowingModule):
                 # copy new neurons
                 weight_in[num_old + num_split :] = self._in_weight_novel[novel]
                 bias_in[num_old + num_split :] = self._in_bias_novel[novel]
-                weight_out[:, num_old + num_split :] = self._out_weight_novel[:, novel] * self.step_size[None, novel]
+                weight_out[:, num_old + num_split :] = (
+                    self._out_weight_novel[:, novel] * self.step_size[None, novel + self.hidden_features * was_split]
+                )
 
             self.linear_in.weight = Parameter(weight_in)
             self.linear_in.bias = Parameter(bias_in)

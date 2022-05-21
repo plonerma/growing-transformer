@@ -170,6 +170,11 @@ class GrowingTest:
         for m in modules:
             size = m.grow(**kw)
             sizes.append(size)
+
+            if isinstance(model, GrowingModule) and size.numel() > 0:
+                # change step size
+                m.step_size.data = torch.normal(0.0, m.step_size.data)
+
             if len(size) > 0:
                 m.update_config(size[-1])
 
