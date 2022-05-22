@@ -49,7 +49,10 @@ class GrowingEncoder(GrowingModule):
         for prev_layer in self.layer:
             new_layer = GrowingLayer(config=self.config)
 
-            new_layer.apply(new_layer._init_weights)
+            if split:
+                new_layer.load_state_dict(prev_layer.state_dict())
+            else:
+                new_layer.apply(new_layer._init_weights)
 
             new_layer.layer_norm.weight.data = prev_layer.layer_norm.weight
             new_layer.layer_norm.bias.data = prev_layer.layer_norm.bias
