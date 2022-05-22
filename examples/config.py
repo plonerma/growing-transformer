@@ -48,3 +48,4 @@ class Configuration:
     preprocessing_num_workers: Optional[int] = 1
     max_seq_length: Optional[int] = None
     total_steps: Optional[int] = None
+    checkpoint_every: Optional[int] = None

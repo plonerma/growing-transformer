@@ -107,6 +107,7 @@ class BaseTrainer:
         lr_scheduler_warmup_portion: float = None,
         lr_scheduler_num_epochs: int = None,
         lr_scheduler_last_step: int = None,
+        checkpoint_every: Optional[int] = None,
         **kw,
     ):
 
@@ -251,6 +252,11 @@ class BaseTrainer:
                 if test_data is not None:
                     eval_results = self.evaluate(test_data, batch_size=batch_size, num_workers=num_workers)
                     self.track_evaluation(eval_results, global_step, tensorboard_writer=tensorboard_writer)
+
+                if checkpoint_every and ((epoch + 1) % checkpoint_every) == 0:
+                    path = f"checkpoints/checkpoint_{epoch}"
+                    log.info(f"Saving checkpoint at '{path}'")
+                    self.model.save_pretrained(path)
 
         except KeyboardInterrupt:
             log_line(log)

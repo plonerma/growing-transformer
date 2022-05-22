@@ -10,7 +10,6 @@ from config import Configuration
 from datasets import DatasetDict
 from hydra.core.config_store import ConfigStore
 from hydra.utils import get_original_cwd
-from torch import nn
 from torch.utils.tensorboard import SummaryWriter
 from transformers import BertForMaskedLM, BertTokenizer, DataCollatorForLanguageModeling
 
@@ -21,7 +20,7 @@ from growing_transformer.data import (
     prepare_mlm_dataset,
     split_dataset,
 )
-from growing_transformer.model import GrowingMLMTransformer, truncated_normal_
+from growing_transformer.model import GrowingMLMTransformer, HuggingfaceMLMTransformer
 
 cs = ConfigStore.instance()
 cs.store(name="base_config", node=Configuration)
@@ -30,23 +29,7 @@ cs.store(name="base_config", node=Configuration)
 use_truncated_normal = True
 
 
-class HuggingfaceMLMTransformer(BertForMaskedLM):
-    def _init_weights(self, module):
-        """Initialize the weights"""
-        if isinstance(module, nn.Linear):
-            truncated_normal_(module.weight.data, mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            truncated_normal_(module.weight.data, mean=0.0, std=self.config.initializer_range)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
-
-
-@hydra.main(config_path="config", config_name="config")
+@hydra.main(config_path="config", config_name="pretraining")
 def main(cfg: Configuration):
     log = logging.getLogger("growing_transformer")
     # add_file_handler(log, Path("training.log"))
@@ -134,7 +117,7 @@ def main(cfg: Configuration):
     else:
         train_data, test_data = loaded_datasets[0]
 
-    model: Union[GrowingMLMTransformer, BertForMaskedLM]
+    model: Union[GrowingMLMTransformer, BertForMaskedLM, HuggingfaceMLMTransformer]
 
     if cfg.model.type == "growing":
         model = GrowingMLMTransformer(model_config)
@@ -209,13 +192,14 @@ def main(cfg: Configuration):
         betas=cfg.training.betas,
         grow_tune_params=cfg.training.grow_tune_params,
         quit_on_step=cfg.total_steps,
+        checkpoint_every=cfg.checkpoint_every,
         **hparams_train,
     )
 
     tensorboard_writer.add_hparams({**hparams_init, **hparams_train}, results)
 
     if cfg.save_model:
-        torch.save(model.state_dict(), "trained_model.pt")  # type:ignore
+        model.save_pretrained("model")  # type:ignore
 
     tensorboard_writer.close()
 

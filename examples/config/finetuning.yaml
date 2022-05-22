@@ -1,0 +1,10 @@
+task: "cola"
+device: "cuda:0"
+lr: 1e-5
+epochs: 5
+warmup_portion: 0.06
+gca_batches: 1
+load: Null
+batch: 32
+weight_decay: 0.1
+checkpoint_every: 1

@@ -3,7 +3,11 @@ from .base import Growing, GrowingModule, truncated_normal_
 from .encoder import GrowingEncoder
 from .layer import GrowingLayer
 from .mlp import GrowingMLP
-from .transformer import GrowingMLMTransformer, GrowingTransformer
+from .transformers import (
+    GrowingMLMTransformer,
+    GrowingTransformer,
+    HuggingfaceMLMTransformer,
+)
 
 __all__ = [
     "truncated_normal_",
@@ -17,5 +21,6 @@ __all__ = [
     "GrowingEncoder",
     "GrowingLayer",
     "GrowingMLP",
+    "HuggingfaceMLMTransformer",
     "truncated_normal_",
 ]

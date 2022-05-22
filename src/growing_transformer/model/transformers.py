@@ -4,13 +4,14 @@ import torch
 from torch import Tensor
 from transformers.models.bert.modeling_bert import (
     BertEmbeddings,
+    BertForMaskedLM,
     BertOnlyMLMHead,
     BertPooler,
     MaskedLMOutput,
 )
 
 from ..configuration import GrowingConfig
-from .base import Growing
+from .base import Growing, truncated_normal_
 from .encoder import GrowingEncoder
 
 
@@ -124,3 +125,23 @@ class GrowingMLMTransformer(Growing):
             loss=masked_lm_loss,
             logits=prediction_scores,
         )
+
+    def save_pretrained(self, **kwargs):
+        dummy = BertForMaskedLM(self.config)
+        return dummy.save_pretrained(state_dict=self.state_dict(), **kwargs)
+
+
+class HuggingfaceMLMTransformer(BertForMaskedLM):
+    def _init_weights(self, module):
+        """Initialize the weights"""
+        if isinstance(module, torch.nn.Linear):
+            truncated_normal_(module.weight.data, mean=0.0, std=self.config.initializer_range)
+            if module.bias is not None:
+                module.bias.data.zero_()
+        elif isinstance(module, torch.nn.Embedding):
+            truncated_normal_(module.weight.data, mean=0.0, std=self.config.initializer_range)
+            if module.padding_idx is not None:
+                module.weight.data[module.padding_idx].zero_()
+        elif isinstance(module, torch.nn.LayerNorm):
+            module.bias.data.zero_()
+            module.weight.data.fill_(1.0)

@@ -1,9 +1,12 @@
-import argparse
 import logging
-from datetime import datetime
+from dataclasses import dataclass
 from pathlib import Path
+from typing import Optional
 
+import hydra
 import torch
+from hydra.core.config_store import ConfigStore
+from hydra.utils import get_original_cwd
 from torch.utils.tensorboard import SummaryWriter
 from transformers import (
     BertForSequenceClassification,
@@ -15,43 +18,47 @@ import growing_transformer
 from growing_transformer import BaseTrainer as Trainer
 from growing_transformer.data import load_glue_task
 
-log = logging.getLogger("fine-tuning")
+
+@dataclass
+class FinetuneConfig:
+    task: str = "cola"
+    device: str = "cuda:0"
+    lr: float = 1e-5
+    epochs: int = 5
+    warmup_portion: float = 0.06
+    gca_batches: int = 1
+    load: Optional[str] = None
+    batch: int = 32
+    checkpoint_every: Optional[int] = None
 
 
-def parse_args():
-    parser = argparse.ArgumentParser(description="Fine-tune model.")
-    parser.add_argument("task", metavar="TASK", type=str, help="task to finetune on")
-    parser.add_argument("--device", type=str, help="device to use for finetuning", default=None)
-    parser.add_argument("--lr", type=float, help="learning rate", default=1e-5)
-    parser.add_argument("--epochs", type=float, help="number of epochs", default=10)
-    parser.add_argument("--warmup_pct", type=float, help="warmup time (as float < 1.0)", default=0.06)
-    parser.add_argument("--gca", type=float, help="number of batches to accumulate for each update step", default=2)
-    parser.add_argument("--load_model", type=Path, help="where to loade the model from", default=None)
-    parser.add_argument("--save_model", type=Path, help="where to save the fine tuned model", default=None)
-    parser.add_argument(
-        "--batch", type=float, help="batch size (multiple batches may be accumulated using --gca)", default=16
+cs = ConfigStore.instance()
+cs.store(name="base_config", node=FinetuneConfig)
+
+
+@hydra.main(config_path="config", config_name="finetuning")
+def main(cfg):
+    log = logging.getLogger("finetune")
+
+    logging.basicConfig(
+        level=logging.INFO,
     )
-    return parser.parse_args()
 
-
-def main(args):
-
-    logging.basicConfig(level=logging.INFO)
-
-    if args.device is not None:
-        log.info(f"Set device to {args.device}")
-        growing_transformer.device = torch.device(args.device)
+    if cfg.device is not None:
+        log.info(f"Set device to {cfg.device}")
+        growing_transformer.device = torch.device(cfg.device)
 
     log.info(f"Using device {growing_transformer.device}.")
 
-    log.info(f"Fine-tuning on task {args.task}")
+    log.info(f"Fine-tuning on task {cfg.task}")
 
     tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
 
-    dataset, metric, num_labels = load_glue_task(args.task, tokenizer)
+    dataset, metric, num_labels = load_glue_task(cfg.task, tokenizer)
 
-    if args.load_model is not None:
-        model = BertForSequenceClassification.from_pretrained(args.load_model, num_labels=num_labels)
+    if cfg.load is not None:
+        path = Path(get_original_cwd()) / cfg.load
+        model = BertForSequenceClassification.from_pretrained(path, num_labels=num_labels)
     else:
         # an example model
         model = BertForSequenceClassification.from_pretrained("bert-base-uncased", num_labels=num_labels)
@@ -62,25 +69,23 @@ def main(args):
         data_collator=default_data_collator,
     )
 
-    path = datetime.now().strftime("outputs/%Y-%m-%d/%H-%M-%S")
-
-    tensorboard_writer = SummaryWriter(path)
+    tensorboard_writer = SummaryWriter(".")
 
     trainer.train(
         train_data=dataset["train"],
         test_data=dataset["validation"],
-        max_lr=args.lr,
-        gca_batches=args.gca,
+        max_lr=cfg.lr,
+        gca_batches=cfg.gca_batches,
         batch_size=16,
-        num_epochs=args.epochs,
-        warmup_pct=args.warmup_pct,
+        num_epochs=cfg.epochs,
+        lr_scheduler_warmup_portion=cfg.warmup_portion,
         tensorboard_writer=tensorboard_writer,
+        weight_decay=cfg.weight_decay,
+        checkpoint_every=cfg.checkpoint_every,
     )
 
-    if args.save_model is not None:
-        torch.save(model.state_dict(), args.save_model)
+    model.save_pretrained("finetuned")
 
 
 if __name__ == "__main__":
-    args = parse_args()
-    main(args)
+    main()

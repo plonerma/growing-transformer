@@ -45,35 +45,30 @@ steps:
       warmup_portion: 0.06
   - train:
       num_epochs: ${training.schedule.training_epochs}
-  - checkpoint
   - grow: ${training.schedule.growth_phase}
   - train:
       num_epochs: ${training.schedule.training_epochs}
   - grow: ${training.schedule.growth_phase}
   - train:
       num_epochs: ${training.schedule.training_epochs}
-  - checkpoint
   - grow: ${training.schedule.growth_phase}
   - train:
       num_epochs: ${training.schedule.training_epochs}
   - grow: ${training.schedule.growth_phase}
   - train:
       num_epochs: ${training.schedule.training_epochs}
-  - checkpoint
   - grow: ${training.schedule.growth_phase}
   - train:
       num_epochs: ${training.schedule.training_epochs}
   - grow: ${training.schedule.growth_phase}
   - train:
       num_epochs: ${training.schedule.training_epochs}
-  - checkpoint
   - grow: ${training.schedule.growth_phase}
   - train:
       num_epochs: ${training.schedule.training_epochs}
   - grow: ${training.schedule.growth_phase}
   - train:
       num_epochs: ${training.schedule.training_epochs}
-  - checkpoint
   - grow: ${training.schedule.growth_phase}
   - train:
       num_epochs: ${training.schedule.training_epochs}

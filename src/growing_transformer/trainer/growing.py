@@ -1,5 +1,4 @@
 import logging
-import os
 import re
 import time
 from contextlib import contextmanager
@@ -272,6 +271,7 @@ class GrowingTrainer(BaseTrainer):
         tensorboard_writer=None,
         log_training_info=True,
         grow_tune_params: Mapping = {},
+        checkpoint_every: Optional[int] = None,
         **kw,
     ):
         try:
@@ -339,6 +339,7 @@ class GrowingTrainer(BaseTrainer):
                         lr_scheduler_warmup_portion=lr_scheduler.get("warmup_portion"),
                         lr_scheduler_num_epochs=lr_scheduler.get("num_epochs"),
                         lr_scheduler_last_step=global_step - lr_scheduler.get("start_step", 0) - 1,
+                        checkpoint_every=checkpoint_every,
                         **train_params,
                     )
 
@@ -351,13 +352,6 @@ class GrowingTrainer(BaseTrainer):
                         tensorboard_writer.add_scalar("time/training", train_end - train_start, global_step)
 
                     current_epoch += 1
-
-                elif step_type == step_type.checkpoint:
-                    dir = "checkpoints"
-                    os.makedirs(dir, exist_ok=True)
-                    fn = f"{dir}/checkpoint_{step_index}.pt"
-                    log.info(f"Saving checkpoint at '{fn}'")
-                    torch.save(self.model.state_dict(), fn)
 
                 elif step_type == step_type.lr_scheduler:
                     # calculate steps of all growth phases until another scheduler is defined
