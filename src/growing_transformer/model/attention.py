@@ -64,10 +64,10 @@ class AttentionOutput(GrowingModule):
             assert self._output_weight is not None
 
             value_novel = torch.nn.functional.linear(x, self._value_weight, self._value_bias)
-            value_novel = value_novel.view(batch, length, self.heads, -1)
+            value_novel = value_novel.view(batch, length, self.heads, -1) * self.step_size[None, None, :, :]
 
             out_novel = torch.einsum(einsum_str, attention, value_novel)
-            out_novel = out_novel * self.step_size[None, None, :, :]
+            out_novel = out_novel
             out_novel = out_novel.reshape(batch, length, -1)
 
             # linear transform (like output_linear)

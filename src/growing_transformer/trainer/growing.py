@@ -191,7 +191,7 @@ class GrowingTrainer(BaseTrainer):
                                                 )
                                             for pn, p in m.direction_params(named=True, recursive=False):
                                                 tensorboard_writer.add_histogram(
-                                                    f"step_sizes/step {index}/{n}.{pn}", p, tune_step
+                                                    f"directions/step {index}/{n}.{pn}", p, tune_step
                                                 )
 
                             scaler.step(optimizer)

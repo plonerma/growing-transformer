@@ -9,4 +9,4 @@ defaults:
 save_model: True
 preprocessing_num_workers: 4
 device: "cuda:0"
-save_every: 2
+checkpoint_every: 2

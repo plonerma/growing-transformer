@@ -22,7 +22,7 @@ training:
   grow_tune_params:
     weight_decay: 0.01
     betas: [0.9, 0.98]
-    batch_size: 128
-    gca_batches: 32
+    batch_size: 64
+    gca_batches: 64
 
 max_seq_length: 128

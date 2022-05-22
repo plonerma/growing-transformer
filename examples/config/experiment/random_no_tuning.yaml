@@ -22,6 +22,7 @@ training:
   selection_method: "random"
   tune_direction: False
   tune_step_size: False
+  grow_data_portion: 0.0
 
   grow_tune_params:
     weight_decay: 0.01
