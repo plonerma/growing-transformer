@@ -44,19 +44,19 @@ class GrowingMLP(GrowingModule):
         self.step_size: Optional[torch.nn.Parameter] = None
 
         # update directions (to be trained)
-        self._in_weight_split: Optional[torch.nn.Parameter] = None
-        self._in_bias_split: Optional[torch.nn.Parameter] = None
-        self._out_weight_novel: Optional[torch.nn.Parameter] = None
-        self._in_weight_novel: Optional[torch.nn.Parameter] = None
-        self._in_bias_novel: Optional[torch.nn.Parameter] = None
+        self._in_split_weight: Optional[torch.nn.Parameter] = None
+        self._in_split_bias: Optional[torch.nn.Parameter] = None
+        self._out_novel_weight: Optional[torch.nn.Parameter] = None
+        self._in_novel_weight: Optional[torch.nn.Parameter] = None
+        self._in_novel_bias: Optional[torch.nn.Parameter] = None
 
     def _direction_params(self, named=False) -> NamedDirectionParams:
         return {
-            "split_direction_weight": self._in_weight_split,
-            "split_direction_bias": self._in_bias_split,
-            "novel_direction_out_weight": self._out_weight_novel,
-            "novel_direction_in_weight": self._in_weight_novel,
-            "novel_direction_in_bias": self._in_bias_novel,
+            "split_direction_weight": self._in_split_weight,
+            "split_direction_bias": self._in_split_bias,
+            "novel_direction_out_weight": self._out_novel_weight,
+            "novel_direction_in_weight": self._in_novel_weight,
+            "novel_direction_in_bias": self._in_novel_bias,
         }
 
     @property
@@ -74,15 +74,15 @@ class GrowingMLP(GrowingModule):
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         h = self.linear_in(x)
 
-        was_split = self.step_size is not None and self._in_weight_split is not None
+        was_split = self.step_size is not None and self._in_split_weight is not None
 
         if was_split:
             assert self.step_size is not None
-            assert self._in_weight_split is not None
-            assert self._in_bias_split is not None
+            assert self._in_split_weight is not None
+            assert self._in_split_bias is not None
 
             w_noise = (
-                torch.nn.functional.linear(x, self._in_weight_split, self._in_bias_split)
+                torch.nn.functional.linear(x, self._in_split_weight, self._in_split_bias)
                 * self.step_size[: self.hidden_features]
             )
 
@@ -99,13 +99,13 @@ class GrowingMLP(GrowingModule):
             num_novel = self.num_step_size - was_split * self.hidden_features
 
             if num_novel > 0:
-                assert self._in_weight_novel is not None
-                assert self._in_bias_novel is not None
-                assert self._out_weight_novel is not None
+                assert self._in_novel_weight is not None
+                assert self._in_novel_bias is not None
+                assert self._out_novel_weight is not None
 
-                h_novel = torch.nn.functional.linear(x, self._in_weight_novel, self._in_bias_novel)
+                h_novel = torch.nn.functional.linear(x, self._in_novel_weight, self._in_novel_bias)
                 y_novel = self.activation(h_novel) * self.step_size[-num_novel:]
-                y_novel = torch.nn.functional.linear(y_novel, self._out_weight_novel)
+                y_novel = torch.nn.functional.linear(y_novel, self._out_novel_weight)
                 y = y + y_novel
 
         y = self.dropout(y)
@@ -121,26 +121,26 @@ class GrowingMLP(GrowingModule):
 
         # create update direction for weight and bias
         if split:
-            self._in_weight_split = Parameter(
+            self._in_split_weight = Parameter(
                 torch.empty(self.hidden_features, self.in_features, device=growing_transformer.device),
             )
-            self._in_bias_split = Parameter(torch.empty(self.hidden_features, device=growing_transformer.device))
+            self._in_split_bias = Parameter(torch.empty(self.hidden_features, device=growing_transformer.device))
 
-            truncated_normal_(self._in_weight_split, mean=0.0, std=self.config.init_split_range)
-            truncated_normal_(self._in_bias_split, mean=0.0, std=self.config.init_split_range)
+            truncated_normal_(self._in_split_weight, mean=0.0, std=self.config.init_split_range)
+            truncated_normal_(self._in_split_bias, mean=0.0, std=self.config.init_split_range)
 
         if num_novel > 0:
-            self._in_weight_novel = Parameter(
+            self._in_novel_weight = Parameter(
                 torch.empty(num_novel, self.in_features, device=growing_transformer.device)
             )
-            self._out_weight_novel = Parameter(
+            self._out_novel_weight = Parameter(
                 torch.empty(self.out_features, num_novel, device=growing_transformer.device)
             )
-            self._in_bias_novel = Parameter(torch.empty(num_novel, device=growing_transformer.device))
+            self._in_novel_bias = Parameter(torch.empty(num_novel, device=growing_transformer.device))
 
-            truncated_normal_(self._in_weight_novel, mean=0.0, std=self.config.initializer_range)
-            truncated_normal_(self._out_weight_novel, mean=0.0, std=self.config.initializer_range)
-            self._in_bias_novel.data.zero_()
+            truncated_normal_(self._in_novel_weight, mean=0.0, std=self.config.initializer_range)
+            truncated_normal_(self._out_novel_weight, mean=0.0, std=self.config.initializer_range)
+            self._in_novel_bias.data.zero_()
 
         return self.step_size.size()
 
@@ -150,7 +150,7 @@ class GrowingMLP(GrowingModule):
 
             num_old = self.hidden_features
 
-            was_split = self._in_weight_split is not None
+            was_split = self._in_split_weight is not None
 
             if was_split:
                 # split neurons to keep
@@ -176,16 +176,16 @@ class GrowingMLP(GrowingModule):
             # copy split neurons (with update direction)
 
             if num_split > 0:
-                assert self._in_weight_split is not None
-                assert self._in_bias_split is not None
+                assert self._in_split_weight is not None
+                assert self._in_split_bias is not None
                 assert self.step_size is not None
 
-                weight_noise = self._in_weight_split[split] * self.step_size[split, None]
+                weight_noise = self._in_split_weight[split] * self.step_size[split, None]
 
                 weight_in[split] = self.linear_in.weight[split] + weight_noise
                 weight_in[num_old : num_old + num_split] = self.linear_in.weight[split] - weight_noise
 
-                bias_noise = self._in_bias_split[split] * self.step_size[split]
+                bias_noise = self._in_split_bias[split] * self.step_size[split]
 
                 bias_in[split] = self.linear_in.bias[split] + bias_noise
                 bias_in[num_old : num_old + num_split] = self.linear_in.bias[split] - bias_noise
@@ -195,15 +195,15 @@ class GrowingMLP(GrowingModule):
                 weight_out[:, num_old : num_old + num_split] = self.linear_out.weight[:, split] * 0.5
 
             if novel.size(0) > 0:
-                assert self._in_weight_novel is not None
-                assert self._in_bias_novel is not None
-                assert self._out_weight_novel is not None
+                assert self._in_novel_weight is not None
+                assert self._in_novel_bias is not None
+                assert self._out_novel_weight is not None
 
                 # copy new neurons
-                weight_in[num_old + num_split :] = self._in_weight_novel[novel]
-                bias_in[num_old + num_split :] = self._in_bias_novel[novel]
+                weight_in[num_old + num_split :] = self._in_novel_weight[novel]
+                bias_in[num_old + num_split :] = self._in_novel_bias[novel]
                 weight_out[:, num_old + num_split :] = (
-                    self._out_weight_novel[:, novel] * self.step_size[None, novel + self.hidden_features * was_split]
+                    self._out_novel_weight[:, novel] * self.step_size[None, novel + self.hidden_features * was_split]
                 )
 
             self.linear_in.weight = Parameter(weight_in)
