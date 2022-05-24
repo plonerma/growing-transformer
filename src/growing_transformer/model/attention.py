@@ -2,7 +2,7 @@ from typing import Dict, Optional, Tuple, Union
 
 import torch
 from torch import Tensor
-from torch.nn import LayerNorm, Linear, Parameter
+from torch.nn import Dropout, LayerNorm, Linear, Parameter
 
 import growing_transformer
 
@@ -168,6 +168,9 @@ class ScaledDotProductAttention(GrowingModule):
         self.query_linear: Linear = Linear(config.d_model, self.heads * self.d_head)
 
         self.key_linear: Linear = Linear(config.d_model, self.heads * self.d_head)
+
+        self.dropout = Dropout(config.attention_probs_dropout_prob)
+
         self.reset_grow_state()
         self.to(growing_transformer.device)
 
@@ -228,7 +231,13 @@ class ScaledDotProductAttention(GrowingModule):
                 -10000,
             )
 
-        return torch.softmax(product, dim=-1)
+        attention_probs = torch.softmax(product, dim=-1)
+
+        # This is actually dropping out entire tokens to attend to, which might
+        # seem a bit unusual, but is taken from the original Transformer paper.
+        attention_probs = self.dropout(attention_probs)
+
+        return attention_probs
 
     def grow(self, num_novel: int = 0, split: bool = False) -> torch.Size:
         # add parameter to measure influence/gradient of adding new neurons
@@ -334,6 +343,8 @@ class GrowingAttention(GrowingModule):
         self.output = AttentionOutput(config=config)
         self.layer_norm = LayerNorm(self.d_model, eps=config.layer_norm_eps)
 
+        self.dropout = Dropout(config.hidden_dropout_prob)
+
         self.reset_grow_state()
         self.to(growing_transformer.device)
 
@@ -362,6 +373,7 @@ class GrowingAttention(GrowingModule):
         if influence_factor is not None:
             out = out * influence_factor
 
+        out = self.dropout(out)
         out = self.layer_norm(out + x)
 
         if not return_attention:
@@ -401,6 +413,9 @@ class GrowingAttention(GrowingModule):
             self._new_output = AttentionOutput(config=self.config, heads=num_novel, bias=False)
 
             truncated_normal_(self._new_output.output_linear.weight, mean=0.0, std=self.config.initializer_range)
+
+            # set training flag of all new modules to own state
+            self.train(self.training)
 
             return self.step_size.size()
         else:
