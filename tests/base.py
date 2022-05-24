@@ -157,6 +157,8 @@ class GrowingTest:
 
         model.eval()
 
+        assert all([not m.training for m in model.modules()])
+
         x = self.random_batch()
 
         modules: List[Growing]
@@ -178,13 +180,15 @@ class GrowingTest:
             if len(size) > 0:
                 m.update_config(size[-1])
 
+        assert all([not m.training for m in model.modules()])
+
         y_a = model(x)
 
         # degrow keeping all neurons
         for m, size in zip(modules, sizes):
             m.degrow(torch.arange(size.numel()))
 
-        model.eval()
+        assert all([not m.training for m in model.modules()])
 
         y_b = model(x)
 
