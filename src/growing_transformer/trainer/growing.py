@@ -39,7 +39,7 @@ class GrowingTrainer(BaseTrainer):
         num_epochs: int = 1,
         shuffle=True,
         num_workers: Optional[int] = None,
-        track_tuned_params=True,
+        track_tuned_params=False,
         grow_select_portion=0.1,
         no_decay: List[str] = ["bias", "layer_norm.weight", "LayerNorm.weight"],
         **optimizer_params,

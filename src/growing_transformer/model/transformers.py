@@ -126,9 +126,9 @@ class GrowingMLMTransformer(Growing):
             logits=prediction_scores,
         )
 
-    def save_pretrained(self, **kwargs):
+    def save_pretrained(self, path, **kwargs):
         dummy = BertForMaskedLM(self.config)
-        return dummy.save_pretrained(state_dict=self.state_dict(), **kwargs)
+        return dummy.save_pretrained(save_directory=path, state_dict=self.state_dict(), **kwargs)
 
 
 class HuggingfaceMLMTransformer(BertForMaskedLM):
