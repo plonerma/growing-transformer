@@ -1,5 +1,7 @@
 import logging
+from math import floor
 
+import pytest
 import torch
 from transformers.models.bert.modeling_bert import BertEncoder
 
@@ -25,7 +27,8 @@ class TestTransformerEncoder(GrowingTest):
 
         return model
 
-    def test_function(self):
+    @pytest.mark.parametrize("with_attention", [True, False])
+    def test_function(self, with_attention):
         # initialize growing multihead attention block
         config = self.new_config()
         growing_model = self.new_model(config)
@@ -54,8 +57,20 @@ class TestTransformerEncoder(GrowingTest):
 
         x = self.random_batch()
 
-        y_a = growing_model(x)
-        y_b = bert_encoder(x)
+        if with_attention:
+            batch_size, length = x.shape[:2]
+
+            # do not pay attention to some elements
+            seq_lengths = torch.randint(floor(0.2 * length), length, (batch_size,))
+
+            attention_mask = torch.arange(length).repeat(batch_size, 1) <= seq_lengths[:, None]
+
+            attention_mask = attention_mask[:, None, None, :]
+        else:
+            attention_mask = None
+
+        y_a = growing_model(x, attention_mask=attention_mask)
+        y_b = bert_encoder(x, attention_mask=attention_mask)
 
         y_b = y_b.last_hidden_state
 
