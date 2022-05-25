@@ -16,7 +16,7 @@ from .encoder import GrowingEncoder
 
 
 class GrowingTransformer(Growing):
-    def __init__(self, config: GrowingConfig, add_pooling_layer=False):
+    def __init__(self, config: GrowingConfig, add_pooling_layer=True):
         super().__init__(config=config)
 
         self.embeddings = BertEmbeddings(config)
@@ -32,18 +32,31 @@ class GrowingTransformer(Growing):
 
     def forward(
         self,
-        input_ids: Tensor = None,
+        input_ids: Tensor,
         attention_mask: Tensor = None,
         token_type_ids: Tensor = None,
         position_ids: Tensor = None,
     ):
+
+        if attention_mask is not None:
+            if attention_mask.dim() == 3:
+                extended_attention_mask = attention_mask[:, None, :, :]
+            elif attention_mask.dim() == 2:
+                extended_attention_mask = attention_mask[:, None, None, :]
+            else:
+                raise ValueError(f"Wrong shape for attention_mask (shape {attention_mask.shape})")
+
+            extended_attention_mask = (1.0 - extended_attention_mask) * -10000.0
+        else:
+            extended_attention_mask = None
+
         embeded = self.embeddings(
             input_ids=input_ids,
             position_ids=position_ids,
             token_type_ids=token_type_ids,
         )
 
-        encoded = self.encoder(embeded, attention_mask=attention_mask)
+        encoded = self.encoder(embeded, attention_mask=extended_attention_mask)
 
         if self.pooler is not None:
             return self.pooler(encoded)
@@ -59,7 +72,7 @@ class GrowingMLMTransformer(Growing):
     def __init__(self, config):
         super().__init__(config)
 
-        self.bert = GrowingTransformer(config)
+        self.bert = GrowingTransformer(config, add_pooling_layer=False)
         self.cls = BertOnlyMLMHead(config)
 
         # tie input and output embeddings

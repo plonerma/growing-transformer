@@ -2,6 +2,7 @@ from typing import Optional
 
 import torch
 from torch import Tensor
+from transformers.modeling_utils import apply_chunking_to_forward
 
 import growing_transformer
 
@@ -27,6 +28,9 @@ class GrowingLayer(Growing):
         eps = self.config.layer_norm_eps
         self.layer_norm = torch.nn.LayerNorm(config.d_model, eps=eps)
 
+        self.chunk_size_feed_forward = config.chunk_size_feed_forward
+        self.seq_len_dim = 1
+
         self.to(growing_transformer.device)
 
         if self.config.bert_like_state_dict:
@@ -34,10 +38,17 @@ class GrowingLayer(Growing):
             self._register_load_state_dict_pre_hook(self._load_bert_state_dict_pre_hook)
 
     def forward(self, x: Tensor, influence_factor=1.0, attention_mask: Optional[Tensor] = None):
-        x1 = self.attention(x, influence_factor=influence_factor, attention_mask=attention_mask)
-        mlp_out = self.mlp(x1) * influence_factor
-        x2 = self.layer_norm(x1 + mlp_out)
-        return x2
+        attention_output = self.attention(x, influence_factor=influence_factor, attention_mask=attention_mask)
+
+        mlp_out = apply_chunking_to_forward(
+            self.ffn_chunk, self.chunk_size_feed_forward, self.seq_len_dim, attention_output
+        )
+
+        mlp_out = mlp_out * influence_factor
+        return self.layer_norm(attention_output + mlp_out)
+
+    def ffn_chunk(self, x):
+        return self.mlp(x)
 
     def apply_influence_factor(self, f):
         self.mlp.linear_out.weight.data *= f

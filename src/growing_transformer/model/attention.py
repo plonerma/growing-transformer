@@ -224,12 +224,8 @@ class ScaledDotProductAttention(GrowingModule):
         product = product / torch.sqrt(torch.tensor(self.d_head))
 
         if attention_mask is not None:
-            product = product.masked_fill(
-                # apply mask to every head and every query token
-                attention_mask[:, None, None, :].bool(),
-                # fill with very small value
-                -10000,
-            )
+            # Apply the attention mask (precomputed for all layers in forward() function of model)
+            product = product + attention_mask
 
         attention_probs = torch.softmax(product, dim=-1)
 
