@@ -2,9 +2,9 @@ training_epochs: 2
 
 tune_params:
   direction:
-    lr: 5e-3
-  step_size:
     lr: 2e-3
+  step_size:
+    lr: 1e-3
 
 steps:
   #- train:

@@ -1,0 +1,7 @@
+type: growing
+config:
+  intermediate_size: 1920
+  num_hidden_layers: 3
+  d_head: 46
+  step_size: 1e-1
+tokenizer: "bert-base-uncased"

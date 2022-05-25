@@ -14,27 +14,22 @@ growth_phase:
     tune_params: ${training.schedule.tune_params}
   - match: .mlp
     split: True
-    num_novel: 265
-    num_keep: 256
+    num_novel: 128
+    num_keep: 128
     tune_params: ${training.schedule.tune_params}
   - match: .attention.output
     # since there is no activation function bewtween the value and output layer
     # the split direction would just cancel out
     split: False
-    num_novel: 16
-    num_keep: 4
+    num_novel: 8
+    num_keep: 2
     tune_params: ${training.schedule.tune_params}
   - match: .dot_product
     split: False  # splitting up key and query is equivalent to just adding new neurons
-    num_novel: 16
-    num_keep: 4
+    num_novel: 8
+    num_keep: 2
     tune_params: ${training.schedule.tune_params}
-  - match: .attention
-    split: False
-    num_novel: 4
-    num_keep: 1
-    tune_params: ${training.schedule.tune_params}
-  
+
 
 
 steps:
