@@ -1,6 +1,7 @@
 import logging
 import math
 import time
+from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
 import datasets
@@ -254,8 +255,9 @@ class BaseTrainer:
                     self.track_evaluation(eval_results, global_step, tensorboard_writer=tensorboard_writer)
 
                 if checkpoint_every and ((epoch + 1) % checkpoint_every) == 0:
-                    path = f"checkpoints/checkpoint_{epoch}"
+                    path = Path("checkpoints") / f"checkpoint_{epoch}"
                     log.info(f"Saving checkpoint at '{path}'")
+
                     self.model.save_pretrained(path)
 
         except KeyboardInterrupt:

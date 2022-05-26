@@ -1,7 +1,9 @@
+from pathlib import Path
 from typing import Optional, Tuple, Union
 
 import torch
 from torch import Tensor
+from transformers.file_utils import WEIGHTS_NAME
 from transformers.models.bert.modeling_bert import (
     BertEmbeddings,
     BertForMaskedLM,
@@ -139,9 +141,11 @@ class GrowingMLMTransformer(Growing):
             logits=prediction_scores,
         )
 
-    def save_pretrained(self, path, **kwargs):
-        dummy = BertForMaskedLM(self.config)
-        return dummy.save_pretrained(save_directory=path, state_dict=self.state_dict(), **kwargs)
+    def save_pretrained(self, path, checkpoint=False, **kwargs):
+        path = Path(path)
+        path.mkdir(exist_ok=True, parents=True)
+        torch.save(self.state_dict(), path / WEIGHTS_NAME)
+        self.config.save_pretrained(path)
 
 
 class HuggingfaceMLMTransformer(BertForMaskedLM):
