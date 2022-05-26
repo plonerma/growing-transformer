@@ -18,19 +18,15 @@ log = logging.getLogger("growing_transformer.tests")
 
 class TestGrowingTransformer:
     @pytest.mark.slow
-    def test_mlm_transformer_function(self):
+    def test_mlm_transformer_function(self, tmp_path):
         # initialize growing transformer
         config = GrowingConfig()
         growing_model = GrowingMLMTransformer(config)
 
-        # get state from that model
-        state = growing_model.state_dict()
+        growing_model.save_pretrained(tmp_path)
 
-        # initialize bert transformer
-        bert_model = BertForMaskedLM(config)
-
-        # load state for growing model into bert model
-        bert_model.load_state_dict(state)
+        # initialize bert transformer with parameters and config from growing_model
+        bert_model = BertForMaskedLM.from_pretrained(tmp_path)
 
         tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
 
@@ -66,7 +62,6 @@ class TestGrowingTransformer:
             # the same starting condition
             growing_model.train()
             bert_model.train()
-
 
             torch.manual_seed(42)
             growing_model.zero_grad()
