@@ -1,0 +1,33 @@
+# @package _global_
+
+defaults:
+  - override /datasets:
+    - wiki_big
+    - bookcorpus
+  - override /model: huggingface
+  - override /training: static
+  - _self_
+
+max_seq_length: 128
+
+training:
+  batch_size: 128
+  gca_batches: 32
+  learning_rate: ${training.schedule.learning_rate}
+
+  weight_decay: 0.01
+  betas: [0.9, 0.98]
+
+
+
+
+
+
+
+
+
+
+
+
+  schedule:
+    learning_rate: 5e-4

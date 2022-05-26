@@ -6,18 +6,22 @@ defaults:
       - bookcorpus
   - override /model: grow_start
   - override /training: growing
-  - override /training/schedule: growing_single_step
   - _self_
 
-load_state: models/grow_start.pt
+max_seq_length: 128
 
 training:
   batch_size: 128
   gca_batches: 32
-  learning_rate: 1e-3
+  learning_rate: ${training.schedule.learning_rate}
 
   weight_decay: 0.01
   betas: [0.9, 0.98]
+
+  selection_method: "random"
+  tune_direction: False
+  tune_step_size: False
+  grow_data_portion: 0.0
 
   grow_tune_params:
     weight_decay: 0.01
@@ -25,13 +29,5 @@ training:
     batch_size: 64
     gca_batches: 64
 
-max_seq_length: 128
-
-
-model:
-  config:
-    intermediate_size: 2304
-    num_hidden_layers: 9
-    num_heads: 9
-    d_head: 52
-    step_size: 1e-2
+  schedule:
+    learning_rate: 5e-4
