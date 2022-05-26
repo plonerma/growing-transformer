@@ -27,12 +27,6 @@ class GrowingConfig(BertConfig):
         step_size: float = 1e-1,
         layer_step_size: Optional[float] = None,
         bert_like_state_dict: bool = True,
-        split: bool = True,
-        mlp_split: Optional[bool] = None,
-        num_novel: int = 4,
-        mlp_num_novel: Optional[int] = None,
-        mha_num_novel: Optional[int] = None,
-        sdp_num_novel: Optional[int] = None,
         init_split_range: Optional[float] = None,
         **kwargs,
     ):
@@ -53,12 +47,6 @@ class GrowingConfig(BertConfig):
         # growth specific args
         self.step_size = step_size
         self.layer_step_size = first_not_none(layer_step_size, step_size)
-        self.mlp_split = first_not_none(mlp_split, split)
-
-        # number of neurons that are introduced
-        self.mlp_num_novel = first_not_none(mlp_num_novel, num_novel)
-        self.mha_num_novel = first_not_none(mha_num_novel, num_novel)
-        self.sdp_num_novel = first_not_none(sdp_num_novel, num_novel)
 
         # values for initializing split directions and novel neurons
         self.init_split_range = first_not_none(init_split_range, self.initializer_range)
