@@ -32,10 +32,6 @@ class TestGrowingTransformer:
         # load state for growing model into bert model
         bert_model.load_state_dict(state)
 
-        # compare the function of the two transformers
-        bert_model.eval()
-        growing_model.eval()
-
         tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
 
         max_seq_length = 64
@@ -65,14 +61,39 @@ class TestGrowingTransformer:
         )
 
         for batch in data_loader:
-            y_a = growing_model(**batch)
-            y_b = bert_model(**batch)
+            # make sure the models are in train mode
+            # by setting the seed prior to computing the results, we can give
+            # the same starting condition
+            growing_model.train()
+            bert_model.train()
 
-            diff = y_a["logits"] - y_b["logits"]
+
+            torch.manual_seed(42)
+            growing_model.zero_grad()
+            y_a = growing_model(**batch)
+            y_a.loss.backward()
+
+            torch.manual_seed(42)
+            bert_model.zero_grad()
+            y_b = bert_model(**batch)
+            y_b.loss.backward()
+
+            diff = torch.abs(y_a.logits - y_b.logits)
 
             log.info(f"Max. difference: {diff.max()}")
 
-            assert torch.all(diff < 1e-5)
+            assert torch.all(diff < 1e-12)
+
+            # If gradient in lower level is the same, there should not be any
+            # issue further up the chain
+            pa = growing_model.bert.encoder.layer[0].attention.layer_norm.weight
+            pb = bert_model.bert.encoder.layer[0].attention.output.LayerNorm.weight
+
+            diff = torch.abs(pa.grad - pb.grad)
+
+            log.info(f"Max. grad difference: {diff.max()}")
+
+            assert torch.all(diff < 1e-12)
 
             break
 
