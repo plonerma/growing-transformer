@@ -140,8 +140,9 @@ class GrowingModule(Growing):
     def select(self, k: int) -> torch.Tensor:
         assert self.step_size is not None
 
-        # return indices of neurons with largest absolute gradient
-        return torch.topk(self.step_size * self.step_size.grad, k).indices
+        # for positive parameter, a negative gradient will lead to an increase
+        # in the next update step -> will improve the loss more
+        return torch.topk(self.step_size * self.step_size.grad, k, largest=False).indices
 
     @abstractmethod
     def update_config(self, num_added: int):
