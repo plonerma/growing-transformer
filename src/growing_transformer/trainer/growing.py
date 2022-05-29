@@ -41,6 +41,7 @@ class GrowingTrainer(BaseTrainer):
         num_workers: Optional[int] = None,
         track_tuned_params=False,
         grow_select_portion=0.1,
+        grad_at_original=True,
         no_decay: List[str] = ["bias", "layer_norm.weight", "LayerNorm.weight"],
         **optimizer_params,
     ):
@@ -212,7 +213,25 @@ class GrowingTrainer(BaseTrainer):
         # === Select neurons ===
         if self._selection_method == "firefly":
 
+            if grad_at_original:
+                # Reset all step sizes and remember their value (we want to evaluate
+                # the gradient at the original network)
+
+                with torch.no_grad():
+                    tuned_step_sizes = list()
+
+                    for m, size, conf in grown_modules:
+                        tuned_step_sizes.append(m.step_size.detach().clone())
+                        m.step_size.zero_()
+
             self.calculate_step_gradient(grow_select_data, batch_size=batch_size)
+
+            if grad_at_original:
+                # Set step sizes to their tuned values
+                with torch.no_grad():
+                    for (m, size, conf), step in zip(grown_modules, tuned_step_sizes):
+                        m.step_size.data = step
+
             time_grad = time.time()
 
             if tensorboard_writer:
