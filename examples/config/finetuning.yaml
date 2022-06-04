@@ -8,3 +8,6 @@ load: Null
 batch: 32
 weight_decay: 0.1
 checkpoint_every: 1
+save: true
+seed: 0
+scheduler: "linear"

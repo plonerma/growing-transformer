@@ -188,6 +188,8 @@ class BaseTrainer:
                     last_step=lr_scheduler_last_step,
                 )
             else:
+                assert lr_scheduler_warmup_steps is None, "No scheduler type selected, but warmup steps set"
+                assert lr_scheduler_warmup_portion is None, "No scheduler type selected, but warmup portion set"
                 scheduler = None
 
             log_line(log)

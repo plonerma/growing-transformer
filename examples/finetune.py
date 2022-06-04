@@ -25,11 +25,14 @@ class FinetuneConfig:
     device: str = "cuda:0"
     lr: float = 1e-5
     epochs: int = 5
+    scheduler: str = "linear"
     warmup_portion: float = 0.06
     gca_batches: int = 1
     load: Optional[str] = None
     batch: int = 32
     checkpoint_every: Optional[int] = None
+    save: bool = True
+    seed: int = 0
 
 
 cs = ConfigStore.instance()
@@ -48,6 +51,8 @@ def main(cfg):
         log.info(f"Set device to {cfg.device}")
         growing_transformer.device = torch.device(cfg.device)
 
+    torch.manual_seed(cfg.seed)
+
     log.info(f"Using device {growing_transformer.device}.")
 
     log.info(f"Fine-tuning on task {cfg.task}")
@@ -58,6 +63,7 @@ def main(cfg):
 
     if cfg.load is not None:
         path = Path(get_original_cwd()) / cfg.load
+        log.info(f"Loading model from '{path}'")
         model = BertForSequenceClassification.from_pretrained(path, num_labels=num_labels)
     else:
         # an example model
@@ -78,13 +84,17 @@ def main(cfg):
         gca_batches=cfg.gca_batches,
         batch_size=16,
         num_epochs=cfg.epochs,
+        lr_scheduler_type=cfg.scheduler,
         lr_scheduler_warmup_portion=cfg.warmup_portion,
         tensorboard_writer=tensorboard_writer,
         weight_decay=cfg.weight_decay,
         checkpoint_every=cfg.checkpoint_every,
     )
 
-    model.save_pretrained("finetuned")
+    tensorboard_writer.close()
+
+    if cfg.save:
+        model.save_pretrained("finetuned")
 
 
 if __name__ == "__main__":
