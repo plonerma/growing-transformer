@@ -11,3 +11,8 @@ checkpoint_every: 1
 save: true
 seed: 0
 scheduler: "linear"
+
+hydra:
+  sweep:
+    dir: multirun/${now:%Y-%m-%d}/${now:%H-%M-%S.%f}
+    subdir: ${hydra.job.num}
