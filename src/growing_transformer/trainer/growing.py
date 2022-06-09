@@ -295,9 +295,6 @@ class GrowingTrainer(BaseTrainer):
     ):
         try:
             if log_training_info:
-
-                log.info(f"Model: {self.model}")
-                log_line(log)
                 log.info(f" - growth phases: {len(schedule)}")
                 log.info(f" - number of samples: {len(train_data)}")
                 log_line(log)

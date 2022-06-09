@@ -26,6 +26,8 @@ class BaseTrainer:
         metric: Optional[datasets.Metric] = None,
         num_workers: int = None,
         batch_size: int = 16,
+        is_regression=False,
+        is_masked=True,
         custom_eval=None,
     ):
         self.model = model
@@ -43,8 +45,10 @@ class BaseTrainer:
 
         self.batch_size = batch_size
         self.custom_eval = custom_eval
+        self.is_regression = is_regression
+        self.is_masked = is_masked
 
-    def get_batch_loader(self, data, *, batch_size=None, num_workers=None, shuffle=True):
+    def get_batch_loader(self, data, *, batch_size=None, num_workers=None, shuffle=True, drop_last=False):
         if num_workers is None:
             num_workers = self.num_workers
 
@@ -56,6 +60,7 @@ class BaseTrainer:
             batch_size=batch_size,
             shuffle=shuffle,
             collate_fn=self.data_collator,
+            drop_last=drop_last,
             num_workers=num_workers,
         )
 
@@ -113,10 +118,6 @@ class BaseTrainer:
     ):
 
         self.model.to(growing_transformer.device)
-
-        if log_training_info:
-            log.info(f"Model: {self.model}")
-            log_line(log)
 
         use_tensorboard = tensorboard_writer is not None
         eval_results = {}
@@ -254,7 +255,7 @@ class BaseTrainer:
 
                 if test_data is not None:
                     eval_results = self.evaluate(test_data, batch_size=batch_size, num_workers=num_workers)
-                    self.track_evaluation(eval_results, global_step, tensorboard_writer=tensorboard_writer)
+                    self.track_evaluation(eval_results, global_step, tensorboard_writer=tensorboard_writer, epoch=epoch)
 
                 if checkpoint_every and ((epoch + 1) % checkpoint_every) == 0:
                     path = Path("checkpoints") / f"checkpoint_{epoch}"
@@ -293,10 +294,10 @@ class BaseTrainer:
         outputs = self.model(**batch)
         return outputs.loss
 
-    def track_evaluation(self, eval_results: Dict, global_step: int = None, tensorboard_writer=None):
+    def track_evaluation(self, eval_results: Dict, global_step: int = None, tensorboard_writer=None, epoch=None):
         with torch.no_grad():
             if self.custom_eval is not None:
-                r = self.custom_eval(self, global_step=global_step)
+                r = self.custom_eval(self, global_step=global_step, epoch=epoch)
                 if r is not None:
                     assert isinstance(r, dict)
                     eval_results.update(r)
@@ -307,6 +308,22 @@ class BaseTrainer:
                 tensorboard_writer.add_scalar(f"eval/{k}", v, global_step)
 
     def evaluate(self, test_data, batch_size=None, num_workers=None) -> Dict:
+        if isinstance(test_data, dict):
+            log.info(f"Evaluating model on {len(test_data)} test sets.")
+
+            complete_results = dict()
+
+            for test_key, partial_data in test_data.items():
+                log.info(f"Evaluating on test set '{test_key}'...")
+
+                partial_results = self.evaluate(partial_data, batch_size=batch_size, num_workers=num_workers)
+
+                for k, v in partial_results.items():
+                    k = test_key + "/" + k
+                    complete_results[k] = v
+
+            return complete_results
+
         log.info(f"Evaluating model on {len(test_data)} samples.")
         self.model.eval()
 
@@ -323,17 +340,22 @@ class BaseTrainer:
                 labels = batch["labels"]
 
                 outputs = self.model(**batch)
-                loss_sum += outputs[0].detach().float()
-                prediction_scores = outputs[1]
+                loss_sum += outputs.loss.detach().float()
 
-                predictions = prediction_scores.argmax(-1)
+                if not self.is_regression:
+                    predictions = outputs.logits.argmax(-1)
+                else:
+                    predictions = outputs.logits.squeeze()
 
-                # only include masked tokens in metrics
-                masked_tokens = (labels >= 0).view(-1)
+                if self.is_masked:
+                    # only include masked tokens in metrics
+                    masked_tokens = (labels >= 0).view(-1)
+                    predictions = predictions.view(-1)[masked_tokens]
+                    labels = labels.view(-1)[masked_tokens]
 
                 self.metric.add_batch(
-                    predictions=predictions.view(-1)[masked_tokens],
-                    references=labels.view(-1)[masked_tokens],
+                    predictions=predictions,
+                    references=labels,
                 )
 
             eval_loss = loss_sum / len(batch_loader)
