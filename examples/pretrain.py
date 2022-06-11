@@ -155,7 +155,7 @@ def main(cfg: Configuration):
         weight_decay=cfg.training.weight_decay,
     )
 
-    def custom_eval(self, global_step=None):
+    def custom_eval(self, global_step=None, epoch=None):
         num_examples = 8
 
         with torch.no_grad():

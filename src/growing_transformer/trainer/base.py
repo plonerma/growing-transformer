@@ -98,7 +98,7 @@ class BaseTrainer:
         weight_decay: float = 0.01,
         gca_batches: int = 16,  # gradient accumulation batches
         num_epochs: int = 5,
-        batch_size: int = 32,
+        batch_size: int = None,
         shuffle: bool = True,
         num_workers: Optional[int] = None,
         propagate_interrupt=False,
@@ -159,7 +159,9 @@ class BaseTrainer:
 
             scaler = torch.cuda.amp.GradScaler()
 
-            batch_loader = self.get_batch_loader(train_data)
+            batch_loader = self.get_batch_loader(
+                train_data, batch_size=batch_size, shuffle=shuffle, num_workers=num_workers
+            )
 
             if lr_scheduler_type is not None:
 
@@ -248,14 +250,19 @@ class BaseTrainer:
                 epoch_end = time.time()
 
                 if use_tensorboard:
-
                     tensorboard_writer.add_scalar("epochs_completed", epoch + 1, global_step)
                     tensorboard_writer.add_scalar("model size/current", self.model_size(), global_step)
                     tensorboard_writer.add_scalar("time/epoch", epoch_end - epoch_start, global_step)
 
                 if test_data is not None:
+                    evaluation_start = time.time()
+
                     eval_results = self.evaluate(test_data, batch_size=batch_size, num_workers=num_workers)
                     self.track_evaluation(eval_results, global_step, tensorboard_writer=tensorboard_writer, epoch=epoch)
+
+                    if use_tensorboard:
+                        evaluation_duration = time.time() - evaluation_start
+                        tensorboard_writer.add_scalar("time/evaluation", evaluation_duration, global_step)
 
                 if checkpoint_every and ((epoch + 1) % checkpoint_every) == 0:
                     path = Path("checkpoints") / f"checkpoint_{epoch}"

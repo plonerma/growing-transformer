@@ -10,6 +10,7 @@ weight_decay: 0.1
 checkpoint_every: 1
 save: true
 seed: 0
+max_seq_length: 256
 scheduler: "linear"
 
 hydra:

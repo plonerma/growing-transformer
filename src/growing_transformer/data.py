@@ -123,13 +123,12 @@ glue_task_to_keys = {
 }
 
 
-def load_glue_task(task, tokenizer, ignore_cache=False):
+def load_glue_task(task, tokenizer, ignore_cache=False, max_seq_length=512):
     dataset = load_dataset("glue", task)
 
     sentence1_key, sentence2_key = glue_task_to_keys[task]
 
     padding = "max_length"
-    max_seq_length = 512
 
     def preprocess_function(examples):
         # Tokenize the texts
@@ -145,6 +144,7 @@ def load_glue_task(task, tokenizer, ignore_cache=False):
         label_list = dataset["train"].features["label"].names
         num_labels = len(label_list)
     else:
+        label_list = None
         num_labels = 1
 
     dataset = dataset.map(
@@ -157,4 +157,4 @@ def load_glue_task(task, tokenizer, ignore_cache=False):
 
     metric = load_metric("glue", task)
 
-    return dataset, metric, num_labels
+    return dataset, metric, num_labels, label_list
