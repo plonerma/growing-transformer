@@ -95,7 +95,7 @@ def main(cfg):
         def predict_testset(trainer, global_step, epoch=None):
             if cfg.task == "mnli":
                 test_sets = [dataset["test_matched"], dataset["test_mismatched"]]
-                test_names = ["_matched", "_mismatched"]
+                test_names = ["-m", "-mm"]
             else:
                 test_sets = [dataset["test"]]
                 test_names = [""]
