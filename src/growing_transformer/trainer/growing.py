@@ -284,7 +284,7 @@ class GrowingTrainer(BaseTrainer):
         grow_data_portion=1.0,
         test_data=None,
         grow_data=None,
-        batch_size: int = 32,
+        batch_size: int = None,
         shuffle: bool = True,
         num_workers: Optional[int] = None,
         tensorboard_writer=None,
@@ -431,7 +431,7 @@ class GrowingTrainer(BaseTrainer):
             p.requires_grad = rg
 
     def calculate_step_gradient(
-        self, train_data, batch_size: int = 32, shuffle: bool = True, num_workers: Optional[int] = None
+        self, train_data, batch_size: int = None, shuffle: bool = True, num_workers: Optional[int] = None
     ):
         with self.some_grad_only(*self.model.step_size_params()):
             self.model.zero_grad(set_to_none=True)
