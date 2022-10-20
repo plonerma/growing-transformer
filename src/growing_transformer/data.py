@@ -2,6 +2,10 @@ import random
 from itertools import chain
 from typing import Union
 
+from functools import partial
+
+import torch
+
 from datasets import Dataset, DatasetDict, load_dataset, load_metric
 from torch.utils.data import Subset
 
@@ -39,9 +43,12 @@ def tokenize_dataset(
 
 
 def group_dataset(
-    dataset: Union[Dataset, DatasetDict], num_workers: int = None, ignore_cache: bool = False, max_seq_length: int = 512
+    dataset: Union[Dataset, DatasetDict], num_workers: int = None,
+    ignore_cache: bool = False, max_seq_length: int = 512
 ):
-    """Group sentences according to FULL-SENTENCES scheme introduced by RoBERTa."""
+    """
+    Group sentences according to FULL-SENTENCES scheme introduced by RoBERTa.
+    """
 
     def group_texts(examples):
         # Concatenate all texts.
@@ -75,7 +82,8 @@ def group_dataset(
 
 
 def prepare_mlm_dataset(
-    tokenizer, dataset, num_workers: int = None, ignore_cache: bool = False, max_seq_length: int = 512
+    tokenizer, dataset, num_workers: int = None, ignore_cache: bool = False,
+    max_seq_length: int = 512
 ):
     dataset = tokenize_dataset(
         tokenizer=tokenizer,
@@ -86,7 +94,8 @@ def prepare_mlm_dataset(
     )
 
     dataset = group_dataset(
-        dataset=dataset, num_workers=num_workers, ignore_cache=ignore_cache, max_seq_length=max_seq_length
+        dataset=dataset, num_workers=num_workers, ignore_cache=ignore_cache,
+        max_seq_length=max_seq_length
     )
 
     return dataset
@@ -133,11 +142,15 @@ def load_glue_task(task, tokenizer, ignore_cache=False, max_seq_length=512):
     def preprocess_function(examples):
         # Tokenize the texts
         args = (
-            (examples[sentence1_key],) if sentence2_key is None else (examples[sentence1_key], examples[sentence2_key])
+            (examples[sentence1_key],)
+            if sentence2_key is None else
+            (examples[sentence1_key], examples[sentence2_key])
         )
         return {
             "labels": examples["label"],
-            **tokenizer(*args, padding=padding, max_length=max_seq_length, truncation=True),
+            **tokenizer(
+                *args, padding=padding, max_length=max_seq_length,
+                truncation=True),
         }
 
     if not task == "stsb":
@@ -158,3 +171,73 @@ def load_glue_task(task, tokenizer, ignore_cache=False, max_seq_length=512):
     metric = load_metric("glue", task)
 
     return dataset, metric, num_labels, label_list
+
+
+def mask_tokens(batch, tokenizer, mlm_prob):
+    """
+    Prepare masked tokens inputs/labels for masked language modeling.
+
+    This function closely follows the functionality of the
+    DataCollatorForLanguageModeling (used in the dynamic case).
+    """
+
+    # If special token mask has been preprocessed, pop it from the dict
+    special_tokens_mask = batch.pop("special_tokens_mask", None)
+
+    if special_tokens_mask is None:
+        special_tokens_mask = [
+            tokenizer.get_special_tokens_mask(
+                val, already_has_special_tokens=True)
+            for val in batch["input_ids"]
+        ]
+
+    special_tokens_mask = torch.tensor(
+        special_tokens_mask, dtype=torch.bool)
+
+    inputs = torch.tensor(batch["input_ids"], dtype=torch.long)
+    labels = inputs.clone()
+
+    # We sample a few tokens in each sequence for MLM training
+    probability_matrix = torch.full(labels.shape, mlm_prob)
+
+    probability_matrix.masked_fill_(special_tokens_mask, value=0.0)
+
+    masked_indices = torch.bernoulli(probability_matrix).bool()
+    # We only compute loss on masked tokens
+    labels[~masked_indices] = -100
+
+    # 80% of the time, we replace masked input tokens with [MASK]
+    indices_replaced = torch.bernoulli(
+        torch.full(labels.shape, 0.8)).bool() & masked_indices
+
+    inputs[indices_replaced] = tokenizer.convert_tokens_to_ids(
+        tokenizer.mask_token)
+
+    # 10% of the time, we replace masked input tokens with random word
+    indices_random = (
+        torch.bernoulli(torch.full(labels.shape, 0.5)).bool()
+        & masked_indices & ~indices_replaced
+    )
+
+    random_words = torch.randint(
+        len(tokenizer), labels.shape, dtype=torch.long)
+
+    inputs[indices_random] = random_words[indices_random]
+
+    # The rest of the time we keep the masked input tokens unchanged
+
+    batch["labels"] = labels.tolist()
+    batch["input_ids"] = inputs.tolist()
+
+    return batch
+
+
+def apply_static_masking(dataset, tokenizer, mlm_prob, num_workers: int = None,
+                         ignore_cache=False):
+    return dataset.map(
+        partial(mask_tokens, tokenizer=tokenizer, mlm_prob=mlm_prob),
+        batched=True,
+        num_proc=num_workers,
+        load_from_cache_file=ignore_cache,
+        desc="Apply language masking",
+    )

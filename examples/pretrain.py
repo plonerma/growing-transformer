@@ -11,7 +11,8 @@ from datasets import DatasetDict
 from hydra.core.config_store import ConfigStore
 from hydra.utils import get_original_cwd
 from torch.utils.tensorboard import SummaryWriter
-from transformers import BertForMaskedLM, BertTokenizer, DataCollatorForLanguageModeling
+from transformers import BertForMaskedLM, BertTokenizer
+from transformers.data import default_data_collator, DataCollatorForLanguageModeling
 
 import growing_transformer
 from growing_transformer import GrowingConfig, GrowingTrainer, GrowthSchedule
@@ -19,6 +20,7 @@ from growing_transformer.data import (
     downsample_dataset,
     prepare_mlm_dataset,
     split_dataset,
+    apply_static_masking
 )
 from growing_transformer.model import GrowingMLMTransformer, HuggingfaceMLMTransformer
 
@@ -92,20 +94,41 @@ def main(cfg: Configuration):
 
         train = tokenized_datasets["train"]
 
+        if not cfg.dynamic_masking:
+            train = apply_static_masking(
+                train, tokenizer=tokenizer,
+                mlm_prob=cfg.training.mlm_probability,
+                num_workers=cfg.preprocessing_num_workers,
+                ignore_cache=cfg.ignore_cache)
+
         if dataset_cfg.downsample is not None and dataset_cfg.downsample < 1:
             train = downsample_dataset(train, dataset_cfg.downsample)
 
         if "test" in tokenized_datasets:
             test = tokenized_datasets["test"]
+            if not cfg.dynamic_masking:
+                test = apply_static_masking(
+                    test, tokenizer=tokenizer,
+                    mlm_prob=cfg.training.mlm_probability,
+                    num_workers=cfg.preprocessing_num_workers,
+                    ignore_cache=cfg.ignore_cache)
 
         else:
-            log.info(f"Dataset has not test-set using {dataset_cfg.test_portion} of train data as test set.")
+            log.info(
+                f"Dataset has no test-set using {dataset_cfg.test_portion} "
+                "of train data as test set.")
             assert dataset_cfg.test_portion is not None
             # set seed for test split
             random.seed(dataset_cfg.test_split_seed)
             test, train = split_dataset(train, dataset_cfg.test_portion)
 
         loaded_datasets.append((train, test))
+
+    if not cfg.dynamic_masking:
+        data_collator = default_data_collator
+    else:
+        data_collator = DataCollatorForLanguageModeling(
+            tokenizer=tokenizer, mlm_probability=cfg.training.mlm_probability)
 
     train_data: torch.utils.data.Dataset
     test_data: torch.utils.data.Dataset
@@ -117,7 +140,8 @@ def main(cfg: Configuration):
     else:
         train_data, test_data = loaded_datasets[0]
 
-    model: Union[GrowingMLMTransformer, BertForMaskedLM, HuggingfaceMLMTransformer]
+    model: Union[
+        GrowingMLMTransformer, BertForMaskedLM, HuggingfaceMLMTransformer]
 
     if cfg.model.type == "growing":
         model = GrowingMLMTransformer(model_config)
@@ -137,8 +161,6 @@ def main(cfg: Configuration):
         model.load_state_dict(state_dict)  # type:ignore
 
     tensorboard_writer = SummaryWriter(".")
-
-    data_collator = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm_probability=cfg.training.mlm_probability)
 
     hparams_init: Dict[str, Any] = dict(
         batch_size=cfg.training.batch_size,

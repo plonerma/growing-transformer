@@ -49,3 +49,4 @@ class Configuration:
     max_seq_length: Optional[int] = None
     total_steps: Optional[int] = None
     checkpoint_every: Optional[int] = None
+    dynamic_masking: bool = False
