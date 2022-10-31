@@ -17,6 +17,7 @@ class Model:
     type: str
     tokenizer: str
     config: Dict = field(default_factory=dict)
+    use_truncated_normal: bool = True
 
 
 @dataclass
@@ -34,6 +35,7 @@ class Training:
     grow_data_portion: float
     grow_tune_params: Dict
     mlm_probability: float = 0.15
+    num_workers: int = 4
 
 
 @dataclass

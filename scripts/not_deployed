@@ -1,0 +1,10 @@
+venv
+runs
+models
+outputs
+multirun
+archive
+results
+tests
+.*
+**/__pycache__
